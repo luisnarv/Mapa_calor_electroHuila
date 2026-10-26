@@ -1,8 +1,8 @@
 """Contrato de entrada y salida del chat."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 Role = Literal["system", "user", "assistant"]
 
@@ -31,7 +31,11 @@ class VistaTablero(BaseModel):
     causal: str | None = None
     clase_servicio: str | None = None
     actividad: str | None = None
-    meses: list[str] = Field(default_factory=list, description="Claves YYYY-MM")
+    # Con un formato fijo y no «cualquier texto»: el tablero mandó «Octubre de 2026» y el
+    # chat respondió «no hay datos» sin que nada indicara por qué.
+    meses: list[Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}$")]] = Field(
+        default_factory=list, description="Claves YYYY-MM"
+    )
 
     def filtros(self) -> dict[str, str]:
         """Solo los filtros de catálogo puestos, sin los meses."""

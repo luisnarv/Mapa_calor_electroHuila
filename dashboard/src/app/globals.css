@@ -943,65 +943,100 @@ table.cmp th:first-child,
 table.cmp td:first-child{text-align:left}
 
 /* =========================================================================
-   ASISTENTE (ChatBot): burbuja y panel flotantes abajo a la derecha
+   ASISTENTE (ChatBot) — burbuja arrastrable + panel flotante
    ========================================================================= */
 
 .cb-launcher{
-  position:fixed;right:20px;bottom:20px;z-index:1200;
+  position:fixed;z-index:1200;
   width:56px;height:56px;padding:0;
   display:flex;align-items:center;justify-content:center;
   border:1px solid var(--cu-strong);border-radius:50%;
   background:var(--banner);color:var(--banner-tx);
-  box-shadow:var(--shadow);cursor:pointer;
-  transition:transform .18s ease,filter .15s ease;
+  box-shadow:var(--shadow);cursor:grab;touch-action:none;
+  transition:transform .18s ease,box-shadow .18s ease,filter .15s ease;
+  /* Sin `both`: al terminar libera el transform y el :hover vuelve a mandar. */
   animation:cb-pop .3s cubic-bezier(.34,1.56,.64,1);
 }
 @keyframes cb-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
 :root[data-theme="dark"] .cb-launcher{background:var(--cu-deep)}
-.cb-launcher:hover{filter:brightness(1.08);transform:scale(1.06)}
-/* Verde solo si el backend contestó al último sondeo. */
+.cb-launcher:hover{filter:brightness(1.08)}
+.cb-launcher>svg{pointer-events:none}
+/* El punto del globo cerrado dice lo mismo que el del encabezado: verde solo si
+   el backend contestó. El sondeo sigue corriendo con el chat cerrado, si no este
+   punto se quedaría en verde para siempre. */
 .cb-launcher-dot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;
   background:var(--ok);border:2px solid var(--bg);pointer-events:none}
 .cb-launcher-dot.cb-dot-off{background:var(--bad)}
 .cb-launcher-dot.cb-dot-wait{background:var(--warn);animation:cb-live-p 1.2s ease-in-out infinite}
-@keyframes cb-live-p{0%,100%{opacity:1}50%{opacity:.35}}
 
+.cb-launcher:hover:not(.dragging){transform:scale(1.06)}
+.cb-launcher.dragging{cursor:grabbing;transform:none;transition:none;
+  box-shadow:0 16px 40px rgba(0,0,0,.45)}
+
+/* ---------- panel ---------- */
 .cb-panel{
-  position:fixed;right:20px;bottom:20px;z-index:1201;
-  width:min(380px,calc(100vw - 24px));height:min(640px,calc(100vh - 40px));
+  position:fixed;z-index:1201;
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--pan);border:1px solid var(--line2);
-  border-radius:14px;box-shadow:var(--shadow);transform-origin:100% 100%;
+  border-radius:14px;box-shadow:var(--shadow);
+  /* salida suave (easeOutQuint): arranca rápido y frena, sin rebote. */
   animation:cb-in .28s cubic-bezier(.22,1,.36,1) both;
 }
+/* El cierre es más corto y acelerando: esperar a que se vaya se siente lento. */
+.cb-panel.closing{animation:cb-out .16s cubic-bezier(.55,0,1,.45) both;pointer-events:none}
+.cb-panel.from-r{transform-origin:100% 60%}
+.cb-panel.from-l{transform-origin:0 60%}
 @keyframes cb-in{from{opacity:0;transform:scale(.92) translateY(12px)}to{opacity:1;transform:none}}
-.cb-panel .cb-msg{animation:cb-rise .26s cubic-bezier(.22,1,.36,1) both}
+@keyframes cb-out{from{opacity:1;transform:none}to{opacity:0;transform:scale(.96) translateY(6px)}}
+
+/* Cada burbuja entra sola: al abrir escalonan y en vivo acompañan la respuesta. */
+.cb-panel:not(.closing) .cb-msg{animation:cb-rise .26s cubic-bezier(.22,1,.36,1) both}
 @keyframes cb-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
 @media (prefers-reduced-motion:reduce){
-  .cb-panel,.cb-launcher,.cb-msg{animation-duration:.01ms!important}
+  .cb-panel,.cb-panel.closing,.cb-launcher,.cb-msg{animation-duration:.01ms!important}
+  /* Los latidos son infinitos: acortarlos no basta, hay que apagarlos. */
   .cb-thinking-t{animation:none!important;opacity:1}
+  .cb-mic.on{animation:none!important}
 }
 
 .cb-head{display:flex;align-items:center;gap:10px;flex:0 0 auto;
-  padding:11px 12px;background:var(--banner);color:var(--banner-tx)}
+  padding:11px 12px;background:var(--banner);color:var(--banner-tx);
+  cursor:grab;user-select:none;touch-action:none}
+.cb-head.dragging{cursor:grabbing}
+.cb-head.pinned{cursor:default}
+/* Plegado: solo queda la cabecera, así que redondea por los cuatro lados. */
+.cb-panel.min{border-radius:14px}
+.cb-head-acts{flex:0 0 auto;display:flex;align-items:center;gap:4px}
+/* en oscuro el verde queda reservado para «orden efectiva» */
 :root[data-theme="dark"] .cb-head{background:linear-gradient(90deg,#143A63,#2C6DB0)}
 .cb-head-ic{flex:0 0 auto;width:32px;height:32px;border-radius:9px;
-  display:flex;align-items:center;justify-content:center;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
   background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.28)}
 .cb-head-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
-.cb-head-t b{font:700 13px var(--ff);letter-spacing:.10em;text-transform:uppercase;color:#FFFFFF}
-.cb-head-t span{display:flex;align-items:center;gap:6px;font-size:10.5px;color:rgba(255,255,255,.92)}
-/* El blanco es el estado sano: sobre el encabezado verde un punto verde no se vería. */
-.cb-live{width:7px;height:7px;border-radius:50%;background:#FFFFFF;box-shadow:0 0 0 3px rgba(255,255,255,.28)}
+.cb-head-t b{font:700 13px var(--ff);letter-spacing:.10em;text-transform:uppercase;
+  color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-head-t span{display:flex;align-items:center;gap:6px;font-size:10.5px;
+  color:rgba(255,255,255,.92);font-variant-numeric:tabular-nums}
+/* Punto de estado del asistente. El blanco es el estado sano: el encabezado es
+   un degradado verde y un punto verde encima no se distinguiría. */
+.cb-live{width:7px;height:7px;border-radius:50%;background:#FFFFFF;
+  box-shadow:0 0 0 3px rgba(255,255,255,.28)}
 .cb-live-off{background:#FF5A5F;box-shadow:0 0 0 3px rgba(255,90,95,.38)}
-.cb-live-wait{background:#FFD500;box-shadow:0 0 0 3px rgba(255,213,0,.32);animation:cb-live-p 1.2s ease-in-out infinite}
+.cb-live-wait{background:#FFD500;box-shadow:0 0 0 3px rgba(255,213,0,.32);
+  animation:cb-live-p 1.2s ease-in-out infinite}
+@keyframes cb-live-p{0%,100%{opacity:1}50%{opacity:.35}}
 .cb-x{flex:0 0 auto;width:26px;height:26px;border-radius:50%;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);color:#FFFFFF}
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);
+  color:#FFFFFF;font-size:12px;line-height:1}
 .cb-x:hover{background:rgba(255,255,255,.3)}
+/* Estado activo del alfiler: se nota que está fijado sin cambiar de icono. */
+.cb-x.on{background:rgba(255,255,255,.34)}
 
+/* ---------- conversación ---------- */
 .cb-body{flex:1 1 auto;min-height:0;overflow-y:auto;
   display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--bg)}
+
 .cb-chips{display:flex;gap:6px;flex-wrap:wrap}
 .cb-chip{background:var(--pan2);border:1px solid var(--line2);color:var(--mut);
   border-radius:999px;padding:5px 11px;font:500 11px var(--ff);cursor:pointer;white-space:nowrap}
@@ -1010,27 +1045,168 @@ table.cmp td:first-child{text-align:left}
 /* pre-wrap: el modelo devuelve saltos de línea y listas que no deben colapsarse. */
 .cb-msg{max-width:86%;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;
   white-space:pre-wrap;overflow-wrap:anywhere}
+.cb-msg.me{align-self:flex-end;background:var(--ises-medio);color:#FFFFFF;
+  border-bottom-right-radius:4px}
+:root[data-theme="dark"] .cb-msg.me{background:var(--cu-deep);color:var(--tx);
+  border:1px solid var(--line2)}
+/* Negritas del markdown del modelo. Solo peso: el color lo hereda de la burbuja,
+   que ya está resuelto para claro y oscuro. */
 .cb-msg strong{font-weight:700}
-.cb-msg.me{align-self:flex-end;background:var(--ises-medio,var(--cu));color:#FFFFFF;border-bottom-right-radius:4px}
-:root[data-theme="dark"] .cb-msg.me{background:var(--cu-deep);color:var(--tx);border:1px solid var(--line2)}
 .cb-msg.bot{align-self:flex-start;background:var(--pan);color:var(--tx);
   border:1px solid var(--line);border-bottom-left-radius:4px}
-.cb-msg.err{border-color:var(--bad);color:var(--bad)}
+
+/* ---------- tarjeta de resultado ---------- */
+/* Etiqueta de espera: fundido al cambiar de frase y latido mientras se mantiene. */
 .cb-thinking{color:var(--mut);font-style:italic}
-.cb-thinking-t{display:inline-block;animation:cb-fade .32s ease-out both,cb-latido 1.9s ease-in-out .32s infinite}
+.cb-thinking-t{display:inline-block;
+  animation:cb-fade .32s ease-out both,cb-latido 1.9s ease-in-out .32s infinite}
 @keyframes cb-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes cb-latido{0%,100%{opacity:.5}50%{opacity:1}}
 
+/* Hora de cada mensaje. Discreta y pegada a su burbuja: es dato de apoyo, no
+   contenido, así que no debe competir con el texto. */
+.cb-hora{font-size:9.5px;color:var(--dim);font-variant-numeric:tabular-nums;
+  margin:-6px 2px 0;letter-spacing:.04em}
+.cb-hora.me{align-self:flex-end}
+.cb-hora.bot{align-self:flex-start;margin-left:6px}
+
+/* ---------- acciones de una respuesta: copiar y calificar ---------- */
+/* Discretas a propósito: acompañan la respuesta, no compiten con ella. */
+/* El margen negativo se come el `gap:10px` de .cb-body: la hora y los iconos
+   son apoyo del MISMO mensaje y deben leerse como un bloque, no como dos
+   cosas sueltas a media distancia entre dos burbujas. */
+.cb-acts{display:flex;align-items:center;gap:2px;
+  align-self:flex-start;margin:-11px 0 2px 4px}
+.cb-acts>button{width:24px;height:24px;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid transparent;color:var(--dim);
+  transition:color .15s ease,background .15s ease,border-color .15s ease}
+.cb-acts>button:hover{background:var(--pan2);border-color:var(--line2);color:var(--tx)}
+.cb-acts>button.votado{color:var(--cu)}
+.cb-acts-ok{margin-left:4px;font-size:10.5px;color:var(--dim)}
+
+/* Modal de comentarios. Va sobre el panel del chat (z-index 1201), no dentro:
+   el panel mide 380px y el formulario no cabe sin apretujarlo.
+   Depende de que .cb-panel NO tenga un transform permanente: hoy se mueve con
+   left/top y su animación termina en `transform:none`. Si alguien lo pasa a
+   transform, este `position:fixed` se anclaría al panel y el modal saldría
+   descolocado. */
+.cb-modal-bg{position:fixed;inset:0;z-index:1300;display:flex;
+  align-items:center;justify-content:center;padding:16px;
+  background:rgba(0,0,0,.42);backdrop-filter:blur(2px)}
+.cb-modal{width:min(430px,100%);display:flex;flex-direction:column;gap:11px;
+  padding:15px 16px;border-radius:14px;
+  background:var(--pan);border:1px solid var(--line2);box-shadow:var(--shadow)}
+.cb-modal-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cb-modal-h b{font-size:13.5px;color:var(--ttl)}
+.cb-modal-h button{width:26px;height:26px;border-radius:50%;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:0;color:var(--dim)}
+.cb-modal-h button:hover{background:var(--pan2);color:var(--tx)}
+.cb-modal-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cb-modal-chips button{cursor:pointer;padding:5px 11px;border-radius:999px;font-size:11.5px;
+  background:transparent;border:1px solid var(--line2);color:var(--mut)}
+.cb-modal-chips button:hover{border-color:var(--cu);color:var(--tx)}
+.cb-modal-chips button.on{background:var(--cu);border-color:var(--cu);color:#FFFFFF}
+.cb-modal textarea{width:100%;border-radius:9px;padding:8px 10px;font-size:11.5px;
+  font-family:var(--ff);resize:vertical;min-height:62px}
+.cb-modal-nota{font-size:10.5px;color:var(--dim);margin:0}
+.cb-modal-acts{display:flex;justify-content:flex-end}
+.cb-modal-acts button.primary{cursor:pointer;padding:6px 16px;border-radius:var(--r);
+  font-size:11.5px;background:var(--cu);border:1px solid var(--cu);color:#FFFFFF}
+.cb-modal-acts button.primary:hover{filter:brightness(1.1)}
+.cb-modal-acts button:disabled{opacity:.45;cursor:default;filter:none}
+
+/* Aviso de que el tablero se filtró solo. Es un botón: al hacer clic vuelve a
+   aplicar ese filtro, útil cuando el usuario lo limpió a mano. */
+.cb-filtro{display:flex;align-items:center;gap:6px;align-self:stretch;text-align:left;
+  padding:7px 10px;border-radius:9px;font-size:11px;line-height:1.4;cursor:pointer;
+  background:var(--pan2);border:1px dashed var(--cu);color:var(--mut);
+  transition:background .15s ease,border-color .15s ease,color .15s ease}
+.cb-filtro:hover{background:var(--pan);border-style:solid;color:var(--tx)}
+.cb-filtro>svg{flex:0 0 auto;color:var(--cu)}
+.cb-filtro b{color:var(--tx);font-weight:600}
+
+.cb-card{background:var(--pan);border:1px solid var(--line2);border-radius:12px;padding:11px}
+.cb-card-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.cb-card-h span{font:700 9.5px var(--ff);letter-spacing:.13em;text-transform:uppercase;color:var(--ttl)}
+.cb-card-h em{font:600 9px var(--ff);letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dim);font-style:normal}
+
+.cb-rank{list-style:none;display:flex;flex-direction:column}
+.cb-rank li{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:12.5px;
+  border-bottom:1px solid var(--row-line)}
+.cb-rank li:last-child{border-bottom:none}
+.cb-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%}
+.cb-rank-n{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;color:var(--tx)}
+.cb-rank-os{flex:0 0 auto;font-size:11px;color:var(--dim)}
+.cb-rank b{flex:0 0 auto;font-size:14px;font-weight:700;min-width:24px;text-align:right}
+
+
+.cb-src{display:flex;align-items:center;gap:5px;margin-top:9px;
+  font-size:10.5px;color:var(--dim);line-height:1.4}
+.cb-src>svg{flex:0 0 auto}
+
+/* ---------- entrada ---------- */
 .cb-foot{flex:0 0 auto;padding:10px 12px 9px;background:var(--pan);border-top:1px solid var(--line)}
 .cb-input{display:flex;align-items:center;gap:8px}
+/* El campo traía el borde por defecto del navegador: gris, plano y ajeno al
+   resto del panel. Se le dan los colores del tema y un foco propio. */
 .cb-input input{flex:1 1 auto;min-width:0;border-radius:999px;padding:10px 16px;font-size:12.5px;
   font-family:inherit;background:var(--pan2);border:1px solid var(--line2);color:var(--tx);
   outline:none;transition:border-color .15s ease,box-shadow .15s ease}
 .cb-input input::placeholder{color:var(--mut);opacity:.7}
-.cb-input input:focus{border-color:var(--cu);box-shadow:0 0 0 3px color-mix(in srgb, var(--cu) 20%, transparent)}
+.cb-input input:focus{border-color:var(--cu);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--cu) 20%, transparent)}
 .cb-input input:disabled{color:var(--mut);cursor:default}
 .cb-send{flex:0 0 auto;width:36px;height:36px;border-radius:50%;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  background:var(--cu);border:1px solid var(--cu-strong);color:var(--ink-soft,#FFFFFF)}
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+  background:var(--ises);border:1px solid var(--ises-medio);color:#FFFFFF}
+:root[data-theme="dark"] .cb-send{background:var(--cu);border-color:var(--cu-strong);color:var(--ink-soft)}
 .cb-send:hover:not(:disabled){filter:brightness(1.1)}
 .cb-send:disabled{opacity:.45;cursor:default}
+
+/* Dictado y adjunto: secundarios frente a enviar. Comparten reglas para que no
+   se separen con el tiempo; solo el micrófono añade el estado "escuchando". */
+.cb-mic,.cb-clip{flex:0 0 auto;width:36px;height:36px;border-radius:50%;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--pan2);border:1px solid var(--line2);color:var(--mut);
+  transition:background .15s ease,color .15s ease,border-color .15s ease}
+.cb-mic:hover:not(:disabled),.cb-clip:hover:not(:disabled){border-color:var(--cu);color:var(--tx)}
+.cb-mic:disabled,.cb-clip:disabled{opacity:.45;cursor:default}
+.cb-mic.on{background:var(--bad);border-color:var(--bad);color:#FFFFFF;
+  animation:cb-escucha 1.5s ease-out infinite}
+/* El halo late hacia afuera: se ve que el micrófono está abierto sin leer nada. */
+@keyframes cb-escucha{
+  0%{box-shadow:0 0 0 0 rgba(255,90,95,.5)}
+  70%,100%{box-shadow:0 0 0 8px rgba(255,90,95,0)}
+}
+
+/* El control nativo dibuja su propio "Seleccionar archivo": se saca del flujo en
+   vez de ocultarlo con display, para que .click() lo siga abriendo. */
+.cb-file{position:absolute;width:1px;height:1px;padding:0;border:0;margin:-1px;
+  overflow:hidden;clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
+
+/* El adjunto se anuncia sobre la caja de texto, no dentro: el nombre es largo. */
+.cb-adjunto{display:flex;align-items:center;gap:7px;margin-bottom:7px;
+  padding:6px 7px 6px 10px;border-radius:12px;font-size:11px;
+  background:var(--pan2);border:1px solid var(--line2);color:var(--tx)}
+.cb-adjunto>svg{flex:0 0 auto;color:var(--cu)}
+/* Dos líneas: el nombre del export es largo y el recuento es lo que de verdad
+   se lee —cuántas quedaron de cuántas—, así que no compiten por el mismo hueco. */
+.cb-adjunto-txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+.cb-adjunto-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-adjunto-d{color:var(--dim);font-size:10px}
+.cb-adjunto button{flex:0 0 auto;width:18px;height:18px;border-radius:50%;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:0;color:var(--mut)}
+.cb-adjunto button:hover{background:var(--line2);color:var(--tx)}
+
+.cb-legal{margin-top:7px;font-size:10px;color:var(--dim);text-align:center;line-height:1.4}
+.cb-legal.err{color:var(--bad)}
+
+@media(max-width:640px){
+  .cb-panel{left:10px!important;right:10px!important;width:auto!important}
+}

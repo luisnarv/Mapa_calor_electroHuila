@@ -93,3 +93,12 @@ def test_el_servicio_descarta_la_bandera_si_el_usuario_no_la_pidio(payload, monk
     assert json.loads(res[0]["content"])["ordenes"] == 18  # Neiva, no los 58 del total
     res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Y en todo el departamento?"))
     assert json.loads(res[0]["content"])["ordenes"] == 58
+
+
+def test_la_vista_rechaza_meses_que_no_son_clave():
+    import pytest
+    from pydantic import ValidationError
+
+    assert VistaTablero(meses=["2026-10"]).meses == ["2026-10"]
+    with pytest.raises(ValidationError):
+        VistaTablero(meses=["Octubre de 2026"])

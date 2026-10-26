@@ -1196,7 +1196,8 @@ export default function Home() {
     causal: nombreDe(dimV.brigs, st.brig),
     clase_servicio: nombreDe(dimV.tipos, st.tipo),
     actividad: nombreDe(dimV.actividades, st.act),
-    meses: st.months || []
+    // El tablero guarda los meses por su etiqueta («Octubre de 2026»); el backend espera «2026-10».
+    meses: (st.months || []).map((etiqueta) => availableMonths.find((m) => m.key === etiqueta)?.ym).filter(Boolean)
   };
 
   const handleSelectNic = (nic) => {
@@ -1606,7 +1607,7 @@ export default function Home() {
           {rightPanelContent}
         </main>
 
-        <ChatBot vista={vistaChat} />
+        <ChatBot vista={vistaChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
       </div>
     );
   }
@@ -1915,7 +1916,7 @@ export default function Home() {
         />
       </main>
 
-      <ChatBot vista={vistaChat} />
+      <ChatBot vista={vistaChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
     </div>
   );
 }
