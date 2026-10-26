@@ -24,6 +24,7 @@ DIMENSIONES: dict[str, tuple[str, str]] = {
     "ciclo": ("ciclos", "ci"),
     "tecnico": ("tecs", "t"),
     "brigada": ("brigadas", "br"),
+    "tipo_actividad": ("tipos_actividad", "ta"),
     "causal": ("brigs", "g"),
     "clase_servicio": ("tipos", "o"),
     "estrato": ("tarifas", "f"),
@@ -71,8 +72,13 @@ def resolver(catalogo: Sequence[str], valor: str, campo: str) -> int:
     Primero coincidencia exacta; si no, por contenido. Dos que encajan por contenido
     («estrato 5» y «estrato 5 exento») no se resuelven: se pregunta cuál.
     """
-    buscado = norm(valor)
+    # «ciclo 3» o «3»: se busca por el código que antecede a « · », no por contenido, porque
+    # «3» está contenido en «13», «23» y «30» y el usuario quería uno solo.
+    buscado = re.sub(r"^ciclo ", "", norm(valor))
     normales = [norm(c) for c in catalogo]
+    por_codigo = [i for i, c in enumerate(catalogo) if " · " in c and norm(c.split(" · ")[0]) == buscado]
+    if len(por_codigo) == 1:
+        return por_codigo[0]
     exactos = [i for i, c in enumerate(normales) if c == buscado]
     if len(exactos) == 1:
         return exactos[0]

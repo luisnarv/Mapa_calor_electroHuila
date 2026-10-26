@@ -45,6 +45,7 @@ class Payload:
     tarifas: list[str]  # estrato
     ciclos: list[str]
     brigadas: list[str]  # tipo de brigada ya homologado
+    tipos_actividad: list[str]  # qué se hizo + con qué brigada
     actividades: list[str]  # Suspension / Reconexion
     b_muni: list[int]  # barrio -> municipio
     b_zona: list[int]  # barrio -> zona
@@ -62,6 +63,7 @@ class Payload:
     f: array
     ci: array
     br: array
+    ta: array  # tipo de actividad
     ac: array
     e: array  # 0 efectiva, 1 fallida
     mes: array  # índice en `meses`
@@ -125,7 +127,7 @@ def _cargar(directorio: Path, doc_uc_campo: Path, doc_ni_con_observacion: Path) 
     columnas = {
         "b": array("h"), "t": array("h"), "g": array("h"), "o": array("h"),
         "c": array("h"), "s": array("h"), "f": array("h"), "ci": array("h"),
-        "br": array("h"), "ac": array("h"),
+        "br": array("h"), "ta": array("h"), "ac": array("h"),
         "mu": array("h"), "zo": array("h"),
         "e": array("b"), "mes": array("b"),
         "m": array("i"),
@@ -142,12 +144,13 @@ def _cargar(directorio: Path, doc_uc_campo: Path, doc_ni_con_observacion: Path) 
         pts = raiz["pts"] if mes.get("recent") else _leer_json(directorio / mes["file"])["pts"]
         if len(pts["e"]) != mes["n"]:
             logger.warning("El mes %s declara %s órdenes y trae %s.", mes["key"], mes["n"], len(pts["e"]))
-        keep, clase, brigada = clasificar(pts, reglas)
+        keep, clase, brigada, tipo_actividad = clasificar(pts, reglas)
         meses.append(mes["key"])
         for clave in copiadas:
             col = pts.get(clave)
             columnas[clave].extend([col[j] for j in keep] if col is not None else [0] * len(keep))
         columnas["br"].extend(brigada)
+        columnas["ta"].extend(tipo_actividad)
         columnas["mu"].extend(dim["b_muni"][pts["b"][j]] for j in keep)
         columnas["zo"].extend(dim["b_zona"][pts["b"][j]] for j in keep)
         columnas["e"].extend(clase)
@@ -169,6 +172,7 @@ def _cargar(directorio: Path, doc_uc_campo: Path, doc_ni_con_observacion: Path) 
         tarifas=dim["tarifas"],
         ciclos=dim["ciclos"],
         brigadas=reglas.brigadas,
+        tipos_actividad=reglas.tipos_actividad,
         actividades=dim["actividades"],
         b_muni=dim["b_muni"],
         b_zona=dim["b_zona"],

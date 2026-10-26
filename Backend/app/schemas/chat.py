@@ -27,6 +27,7 @@ class VistaTablero(BaseModel):
     ciclo: str | None = None
     tecnico: str | None = None
     brigada: str | None = None
+    tipo_actividad: str | None = None
     causal: str | None = None
     clase_servicio: str | None = None
     actividad: str | None = None

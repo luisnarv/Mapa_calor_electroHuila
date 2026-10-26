@@ -7,6 +7,7 @@ no como excepción, para que el modelo pregunte cuál en vez de contestar con ot
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.services import metrics
@@ -26,8 +27,10 @@ _MES = {
 _SIN_PANTALLA = {
     "type": "boolean",
     "description": (
-        "true para ignorar los filtros que el usuario tiene en pantalla (cuando pide todo el "
-        "departamento o dice que no mires lo que está filtrado). Por defecto se aplican."
+        "SOLO si el usuario pide expresamente todo el departamento o que ignores sus filtros. "
+        "Nombrar un periodo, un municipio o un ciclo NO es motivo: el `mes` o el filtro que pasas "
+        "ya reemplaza al de la pantalla, y el resto de filtros de pantalla se siguen aplicando. "
+        "Por defecto no se pasa."
     ),
 }
 
@@ -39,9 +42,13 @@ def _filtro(descripcion: str) -> dict[str, Any]:
 _FILTROS: dict[str, dict[str, Any]] = {
     "municipio": _filtro("Municipio del Huila, p. ej. 'Neiva', 'Garzón'. Es la unidad del mapa."),
     "zona": _filtro("Zona: Centro, Norte, Occidente o Sur."),
-    "ciclo": _filtro("Ciclo de suspensión, por su número o nombre parcial. Ver `valores_de`."),
-    "tecnico": _filtro("Código del funcionario (la base no trae nombres), p. ej. '6044'."),
+    "ciclo": _filtro("Ciclo de suspensión, por su número («3») o por parte del nombre. Ver `valores_de`."),
+    "tecnico": _filtro("Funcionario, por su nombre (completo o parcial) o por su código si solo lo tiene, p. ej. '6044'."),
     "brigada": _filtro("Tipo de brigada: MOTO, CAMIONETA, MOTO - DOBLE MOTO, CUALQUIERA, SIN DATO."),
+    "tipo_actividad": _filtro(
+        "Tipo de actividad del mapa: qué se hizo y con qué brigada, p. ej. «Suspensión en gabinete / con moto». "
+        "Ver `valores_de`."
+    ),
     "causal": _filtro("Causal de suspensión (p. ej. «No pagó», «Factura pagada»)."),
     "clase_servicio": _filtro("Clase de servicio (p. ej. «Alumbrado Público»)."),
     "estrato": _filtro("Estrato: «Estrato 1» … «Estrato 6»."),
@@ -160,6 +167,23 @@ def _ejecutar(nombre: str, p: Payload, a: dict[str, Any]) -> dict[str, Any]:
     if nombre == "valores_de":
         return metrics.valores_de(p, a["dimension"], a.get("texto"))
     raise KeyError(nombre)
+
+
+# Palabras con las que alguien pide salirse de lo que tiene filtrado en pantalla.
+_PIDE_TODO = re.compile(
+    r"\b(departamento|huila|todos? los municipios|todo el territorio|sin filtros?|ignora\w*|quita\w* (los )?filtros?|"
+    r"olvida\w* (los )?filtros?|en general|global(es)?)\b"
+)
+
+
+def pide_ignorar_pantalla(mensaje: str) -> bool:
+    """¿El usuario pidió expresamente salirse de sus filtros?
+
+    El modelo marcaba `sin_filtros_de_pantalla` por su cuenta con solo oír un año («en 2026»),
+    y respondía sobre todo el departamento mientras la persona miraba una zona; con la misma
+    pregunta lo hacía unas veces sí y otras no. La bandera solo vale si el mensaje lo pide.
+    """
+    return bool(_PIDE_TODO.search(metrics.norm(mensaje)))
 
 
 def _con_pantalla(nombre: str, args: dict[str, Any], vista: VistaTablero | None) -> tuple[dict[str, Any], dict[str, Any]]:

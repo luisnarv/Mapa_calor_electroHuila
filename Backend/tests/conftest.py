@@ -18,10 +18,10 @@ def hacer_payload(filas: list[tuple[int, int, int]]) -> Payload:
         tecs=["0", "6044"], tec_invalido=[True, False], brigs=["NP · No pagó"],
         tipos=["AP · Alumbrado Público"], causas=["Suspension realizada", "Sin acceso"],
         subs=["PO · Ejecutada en poste"], tarifas=["Estrato 5", "Estrato 5 exento"],
-        ciclos=["3 · CARRERAS CENTRO"], brigadas=["MOTO"], actividades=["Suspension"],
+        ciclos=["3 · CARRERAS CENTRO"], brigadas=["MOTO"], tipos_actividad=["Suspensión en poste / con moto"], actividades=["Suspension"],
         b_muni=[0, 1], b_zona=[0, 1], meses=["2026-01", "2026-02"],
         b=array("h", mu), mu=mu, zo=array("h", mu), t=array("h", [1] * n), g=ceros(), o=ceros(),
-        c=array("h", [0 if x == 0 else 1 for x in e]), s=ceros(), f=ceros(), ci=ceros(), br=ceros(), ac=ceros(),
+        c=array("h", [0 if x == 0 else 1 for x in e]), s=ceros(), f=ceros(), ci=ceros(), br=ceros(), ta=ceros(), ac=ceros(),
         e=e, mes=mes, m=array("i", [0] * n),
         fecha_min="2026-01-01", fecha_max="2026-02-28", generado="2026-03-01",
     )

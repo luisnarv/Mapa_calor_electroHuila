@@ -1,4 +1,6 @@
-from app.services import tools
+import json
+
+from app.services import payload_store, tools
 
 
 def test_cada_herramienta_declara_sus_parametros():
@@ -69,3 +71,25 @@ def test_la_pantalla_aparece_en_el_prompt_de_sistema():
     assert "FILTROS ACTIVOS EN SU PANTALLA — zona: Norte · meses: 2026-09" in sistema
     req.vista = None
     assert "todo el histórico" in OpenAIService(None, "m", "PROMPT")._mensajes(req)[0]["content"]
+
+
+def test_la_bandera_de_ignorar_pantalla_solo_vale_si_el_usuario_lo_pide():
+    for frase in ("¿Y en todo el departamento?", "dame todo sin filtros", "ignora mis filtros", "en el Huila completo"):
+        assert tools.pide_ignorar_pantalla(frase), frase
+    # Nombrar un año o un lugar no es pedir salirse de la pantalla.
+    for frase in ("Compara la efectividad por tipo de brigada en 2026", "¿Y en septiembre?", "efectividad del ciclo 3"):
+        assert not tools.pide_ignorar_pantalla(frase), frase
+
+
+def test_el_servicio_descarta_la_bandera_si_el_usuario_no_la_pidio(payload, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(payload_store, "obtener", lambda *a, **k: payload)
+    from app.services.openai_service import OpenAIService
+
+    llamadas = {0: {"id": "c", "name": "efectividad", "args": json.dumps({"sin_filtros_de_pantalla": True})}}
+    vista = VistaTablero(municipio="Neiva")
+    res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Cómo va 2026?"))
+    assert json.loads(res[0]["content"])["ordenes"] == 18  # Neiva, no los 58 del total
+    res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Y en todo el departamento?"))
+    assert json.loads(res[0]["content"])["ordenes"] == 58

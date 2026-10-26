@@ -82,3 +82,20 @@ def test_serie_mensual(payload):
 
 def test_valores_de_filtra_por_texto(payload):
     assert metrics.valores_de(payload, "estrato", "exento")["valores"] == ["Estrato 5 exento"]
+
+
+def test_el_ciclo_se_busca_por_su_codigo_no_por_contenido():
+    ciclos = ["3 · CARRERAS CENTRO", "13 · SUR", "23 · SUR OFICIAL", "30 · TV CABLES"]
+    # «3» está contenido en los cuatro; el usuario quería el que se llama 3.
+    assert metrics.resolver(ciclos, "3", "ciclo") == 0
+    assert metrics.resolver(ciclos, "ciclo 13", "ciclo") == 1
+    # Sin código que coincida se vuelve al contenido, y «sur» encaja en dos: se pregunta.
+    with pytest.raises(metrics.FiltroNoResuelto) as exc:
+        metrics.resolver(ciclos, "sur", "ciclo")
+    assert exc.value.candidatos == ["13 · SUR", "23 · SUR OFICIAL"]
+
+
+def test_filtra_y_agrupa_por_tipo_de_actividad(payload):
+    assert metrics.efectividad(payload, {"tipo_actividad": "poste"})["ordenes"] == 58
+    r = metrics.ranking(payload, "tipo_actividad", {}, min_ordenes=1)
+    assert [f["nombre"] for f in r["filas"]] == ["Suspensión en poste / con moto"]

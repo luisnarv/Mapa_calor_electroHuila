@@ -1192,6 +1192,7 @@ export default function Home() {
     ciclo: nombreDe(dimV.ciclos, st.ciclo),
     tecnico: nombreDe(dimV.tecs, st.selTec),
     brigada: nombreDe(dimV.brigadas, st.brigada),
+    tipo_actividad: nombreDe(dimV.tiposActividad, st.tipoAct),
     causal: nombreDe(dimV.brigs, st.brig),
     clase_servicio: nombreDe(dimV.tipos, st.tipo),
     actividad: nombreDe(dimV.actividades, st.act),

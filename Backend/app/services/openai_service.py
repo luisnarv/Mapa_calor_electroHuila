@@ -75,7 +75,7 @@ class OpenAIService:
                 if not llamadas:
                     return
                 mensajes.append(self._mensaje_asistente(texto, llamadas))
-                mensajes.extend(await self._resultados(llamadas, request.vista))
+                mensajes.extend(await self._resultados(llamadas, request.vista, self._ultimo_del_usuario(request)))
                 logger.info("Ronda %s: %s herramienta(s) ejecutada(s).", ronda + 1, len(llamadas))
 
             # Agotadas las rondas se pide una última respuesta SIN herramientas: cortar con
@@ -146,7 +146,9 @@ class OpenAIService:
         }
 
     @staticmethod
-    async def _resultados(llamadas: dict[int, dict[str, str]], vista: VistaTablero | None) -> list[dict[str, Any]]:
+    async def _resultados(
+        llamadas: dict[int, dict[str, str]], vista: VistaTablero | None, pidio: str
+    ) -> list[dict[str, Any]]:
         p = payload_store.obtener(
             settings.DATA_DIR, settings.DOCS_UC_CAMPO, settings.DOCS_NI_CON_OBSERVACION
         )
@@ -158,12 +160,18 @@ class OpenAIService:
                 logger.warning("Argumentos no son JSON válido: %r", ll["args"])
                 resultado = {"error": "Los argumentos no eran JSON válido. Reintenta."}
             else:
+                if args.get("sin_filtros_de_pantalla") and not tools.pide_ignorar_pantalla(pidio):
+                    args.pop("sin_filtros_de_pantalla")
                 # Recorrer el histórico completo es CPU pura: fuera del hilo del bucle de eventos.
                 resultado = await asyncio.to_thread(tools.ejecutar, ll["name"], args, p, vista)
             mensajes.append(
                 {"role": "tool", "tool_call_id": ll["id"], "content": json.dumps(resultado, ensure_ascii=False)}
             )
         return mensajes
+
+    @staticmethod
+    def _ultimo_del_usuario(request: ChatRequest) -> str:
+        return next((m.content for m in reversed(request.messages) if m.role == "user"), "")
 
     def _mensajes(self, request: ChatRequest) -> list[dict]:
         """Antepone el prompt de sistema. El cliente no puede sobrescribirlo."""
@@ -190,8 +198,9 @@ class OpenAIService:
             f"FILTROS ACTIVOS EN SU PANTALLA — {resumen}\n"
             "El servidor los aplica a cada consulta cuando tú no pasas otro lugar o periodo: no hace "
             "falta repetirlos, y el resultado trae `filtros_de_pantalla` con lo que aplicó. Si pide "
-            "expresamente otro lugar, pásalo; si pide todo el departamento o ignorar sus filtros, usa "
-            "`sin_filtros_de_pantalla: true`. «Este municipio» o «aquí» se refiere a los de arriba.\n"
+            "expresamente otro lugar o periodo, pásalo solo ese: los demás filtros siguen aplicándose. "
+            "Usa `sin_filtros_de_pantalla: true` únicamente si dice «todo el departamento» o que ignores sus filtros; "
+            "nombrar un año o un mes no es motivo. «Este municipio» o «aquí» se refiere a los de arriba.\n"
             "Al dar una cifra di siempre sobre qué recorte la calculaste."
         )
 
