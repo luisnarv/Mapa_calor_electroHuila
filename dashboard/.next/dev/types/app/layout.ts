@@ -1,4 +1,4 @@
-// File: C:\Users\P210\Documents\antigravity\Mapas calor\Huila\dashboard\src\app\layout.js
+// File: C:\Proyectos\ELECTROHUILA\SCR\Mapa_calor_electroHuila\dashboard\src\app\layout.js
 import * as entry from '../../../../src/app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

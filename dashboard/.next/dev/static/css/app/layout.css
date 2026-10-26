@@ -945,3 +945,96 @@ table.mt td:first-child,
 table.cmp th:first-child,
 table.cmp td:first-child{text-align:left}
 
+/* =========================================================================
+   ASISTENTE (ChatBot): burbuja y panel flotantes abajo a la derecha
+   ========================================================================= */
+
+.cb-launcher{
+  position:fixed;right:20px;bottom:20px;z-index:1200;
+  width:56px;height:56px;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--cu-strong);border-radius:50%;
+  background:var(--banner);color:var(--banner-tx);
+  box-shadow:var(--shadow);cursor:pointer;
+  transition:transform .18s ease,filter .15s ease;
+  animation:cb-pop .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes cb-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+:root[data-theme="dark"] .cb-launcher{background:var(--cu-deep)}
+.cb-launcher:hover{filter:brightness(1.08);transform:scale(1.06)}
+/* Verde solo si el backend contestó al último sondeo. */
+.cb-launcher-dot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;
+  background:var(--ok);border:2px solid var(--bg);pointer-events:none}
+.cb-launcher-dot.cb-dot-off{background:var(--bad)}
+.cb-launcher-dot.cb-dot-wait{background:var(--warn);animation:cb-live-p 1.2s ease-in-out infinite}
+@keyframes cb-live-p{0%,100%{opacity:1}50%{opacity:.35}}
+
+.cb-panel{
+  position:fixed;right:20px;bottom:20px;z-index:1201;
+  width:min(380px,calc(100vw - 24px));height:min(640px,calc(100vh - 40px));
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--pan);border:1px solid var(--line2);
+  border-radius:14px;box-shadow:var(--shadow);transform-origin:100% 100%;
+  animation:cb-in .28s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes cb-in{from{opacity:0;transform:scale(.92) translateY(12px)}to{opacity:1;transform:none}}
+.cb-panel .cb-msg{animation:cb-rise .26s cubic-bezier(.22,1,.36,1) both}
+@keyframes cb-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .cb-panel,.cb-launcher,.cb-msg{animation-duration:.01ms!important}
+  .cb-thinking-t{animation:none!important;opacity:1}
+}
+
+.cb-head{display:flex;align-items:center;gap:10px;flex:0 0 auto;
+  padding:11px 12px;background:var(--banner);color:var(--banner-tx)}
+:root[data-theme="dark"] .cb-head{background:linear-gradient(90deg,#143A63,#2C6DB0)}
+.cb-head-ic{flex:0 0 auto;width:32px;height:32px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.28)}
+.cb-head-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+.cb-head-t b{font:700 13px var(--ff);letter-spacing:.10em;text-transform:uppercase;color:#FFFFFF}
+.cb-head-t span{display:flex;align-items:center;gap:6px;font-size:10.5px;color:rgba(255,255,255,.92)}
+/* El blanco es el estado sano: sobre el encabezado verde un punto verde no se vería. */
+.cb-live{width:7px;height:7px;border-radius:50%;background:#FFFFFF;box-shadow:0 0 0 3px rgba(255,255,255,.28)}
+.cb-live-off{background:#FF5A5F;box-shadow:0 0 0 3px rgba(255,90,95,.38)}
+.cb-live-wait{background:#FFD500;box-shadow:0 0 0 3px rgba(255,213,0,.32);animation:cb-live-p 1.2s ease-in-out infinite}
+.cb-x{flex:0 0 auto;width:26px;height:26px;border-radius:50%;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);color:#FFFFFF}
+.cb-x:hover{background:rgba(255,255,255,.3)}
+
+.cb-body{flex:1 1 auto;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--bg)}
+.cb-chips{display:flex;gap:6px;flex-wrap:wrap}
+.cb-chip{background:var(--pan2);border:1px solid var(--line2);color:var(--mut);
+  border-radius:999px;padding:5px 11px;font:500 11px var(--ff);cursor:pointer;white-space:nowrap}
+.cb-chip:hover{border-color:var(--cu);color:var(--tx)}
+
+/* pre-wrap: el modelo devuelve saltos de línea y listas que no deben colapsarse. */
+.cb-msg{max-width:86%;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;
+  white-space:pre-wrap;overflow-wrap:anywhere}
+.cb-msg strong{font-weight:700}
+.cb-msg.me{align-self:flex-end;background:var(--ises-medio,var(--cu));color:#FFFFFF;border-bottom-right-radius:4px}
+:root[data-theme="dark"] .cb-msg.me{background:var(--cu-deep);color:var(--tx);border:1px solid var(--line2)}
+.cb-msg.bot{align-self:flex-start;background:var(--pan);color:var(--tx);
+  border:1px solid var(--line);border-bottom-left-radius:4px}
+.cb-msg.err{border-color:var(--bad);color:var(--bad)}
+.cb-thinking{color:var(--mut);font-style:italic}
+.cb-thinking-t{display:inline-block;animation:cb-fade .32s ease-out both,cb-latido 1.9s ease-in-out .32s infinite}
+@keyframes cb-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes cb-latido{0%,100%{opacity:.5}50%{opacity:1}}
+
+.cb-foot{flex:0 0 auto;padding:10px 12px 9px;background:var(--pan);border-top:1px solid var(--line)}
+.cb-input{display:flex;align-items:center;gap:8px}
+.cb-input input{flex:1 1 auto;min-width:0;border-radius:999px;padding:10px 16px;font-size:12.5px;
+  font-family:inherit;background:var(--pan2);border:1px solid var(--line2);color:var(--tx);
+  outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+.cb-input input::placeholder{color:var(--mut);opacity:.7}
+.cb-input input:focus{border-color:var(--cu);box-shadow:0 0 0 3px color-mix(in srgb, var(--cu) 20%, transparent)}
+.cb-input input:disabled{color:var(--mut);cursor:default}
+.cb-send{flex:0 0 auto;width:36px;height:36px;border-radius:50%;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--cu);border:1px solid var(--cu-strong);color:var(--ink-soft,#FFFFFF)}
+.cb-send:hover:not(:disabled){filter:brightness(1.1)}
+.cb-send:disabled{opacity:.45;cursor:default}
+
