@@ -21,8 +21,11 @@ npm run dev      # http://localhost:3000  (usa --webpack; Turbopack no arranca e
   del funcionario (la fórmula del visor ElectroHuila anterior; el original daba 40 %
   a las «perdidas», que aquí no existen).
 - **Filtros**: zona, municipio, causal de suspensión, clase de servicio, ciclo, actividad, meses.
-- **Quitado**: asistente/chat, carga de órdenes por ejecutar, selector SCR/COBROS y el rewrite
-  a `/api-backend` (todo dependía del backend de Air-E).
+- **Quitado**: carga de órdenes por ejecutar, selector SCR/COBROS y el rewrite
+  a `/api-backend` (dependían del backend de Air-E).
+- **Asistente**: `src/components/ChatBot.js` habla con el `Backend/` de este repo
+  (`NEXT_PUBLIC_API_URL`, por defecto `http://127.0.0.1:8000`) y le manda los filtros
+  que el usuario tiene en pantalla.
 - Sin «familias de causa» (`causa_fam`): el diccionario oficial no las define, así que
   «Acciones recomendadas» solo dispara las reglas que no dependen de ellas.
 

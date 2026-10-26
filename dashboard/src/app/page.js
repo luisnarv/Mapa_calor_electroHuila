@@ -11,6 +11,7 @@ import Topbar from "@/components/Topbar";
 import RiskSpine from "@/components/RiskSpine";
 import DetailsPanel from "@/components/DetailsPanel";
 import Dock from "@/components/Dock";
+import ChatBot from "@/components/ChatBot";
 import { adaptarPayload, adaptarPts } from "@/lib/adaptar";
 import { useTheme } from "@/lib/theme";
 import { cacheGet, cachePut, cacheClear } from "@/lib/monthCache";
@@ -1181,6 +1182,22 @@ export default function Home() {
     NIC_raw: rawArrays.NIC
   };
 
+  // Lo que el usuario tiene filtrado, en nombres: el backend no conoce el orden de las
+  // listas de `dim`. Si hay un municipio seleccionado en el mapa, ese manda sobre el filtro.
+  const nombreDe = (lista, i) => (i === "" || i == null ? null : lista?.[+i] ?? null);
+  const dimV = data.dim;
+  const vistaChat = {
+    municipio: st.selBarrio != null ? nombreDe(dimV.munis, dimV.b_muni?.[st.selBarrio]) : nombreDe(dimV.munis, st.muni),
+    zona: nombreDe(dimV.zonas, st.zona),
+    ciclo: nombreDe(dimV.ciclos, st.ciclo),
+    tecnico: nombreDe(dimV.tecs, st.selTec),
+    brigada: nombreDe(dimV.brigadas, st.brigada),
+    causal: nombreDe(dimV.brigs, st.brig),
+    clase_servicio: nombreDe(dimV.tipos, st.tipo),
+    actividad: nombreDe(dimV.actividades, st.act),
+    meses: st.months || []
+  };
+
   const handleSelectNic = (nic) => {
     setSt((prev) => ({
       ...prev,
@@ -1588,6 +1605,7 @@ export default function Home() {
           {rightPanelContent}
         </main>
 
+        <ChatBot vista={vistaChat} />
       </div>
     );
   }
@@ -1896,6 +1914,7 @@ export default function Home() {
         />
       </main>
 
+      <ChatBot vista={vistaChat} />
     </div>
   );
 }
