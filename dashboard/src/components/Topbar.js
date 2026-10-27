@@ -139,9 +139,16 @@ export default function Topbar({
         ? (dim.barrios[st.selBarrio] || "").split(" | ").pop()
         : null;
 
+  // Los técnicos elegidos en su pestaña filtran el mapa igual que cualquier pastilla: sin este
+  // aviso se podía estar viendo solo a dos funcionarios sin que nada en la barra lo dijera.
+  const tecsSel = st.tecs?.length || 0;
+
+  // «Limpiar» aparece con cualquier cosa que se aparte de como abre el tablero: filtros, municipios
+  // o técnicos elegidos, estados ocultos, y los ajustes de la cola de triaje (mínimo y umbral).
   const hayFiltros =
     st.zona !== "" || st.muni !== "" || st.brig !== "" || st.tipo !== "" ||
-    st.act !== "" || st.ciclo !== "" || st.brigada !== "" || st.tipoAct !== "" || mesesPuestos || barrioSel;
+    st.act !== "" || st.ciclo !== "" || st.brigada !== "" || st.tipoAct !== "" || mesesPuestos || barrioSel ||
+    tecsSel > 0 || !st.est.every(Boolean) || st.hotspot !== 60 || st.minOrders !== 10;
 
   const edad = edadDeLosDatos(st.generated);
   const estadoRefresco =
@@ -298,6 +305,25 @@ export default function Topbar({
               >
                 <span className="hd-pill-k">{st.barrios?.length > 1 ? "Municipios" : "Municipio"}</span>
                 <span className="hd-pill-v">: {barrioSel}</span>
+                <span className="hd-pill-ic" aria-hidden="true">
+                  <X size={13} strokeWidth={2.4} />
+                </span>
+              </button>
+            </div>
+          )}
+
+          {tecsSel > 0 && (
+            <div className="hd-f">
+              <button
+                type="button"
+                className="hd-pill on"
+                onClick={() => onFilterChange("tecs", [])}
+                aria-label={`Quitar la selección de ${tecsSel === 1 ? "1 funcionario" : `${tecsSel} funcionarios`}`}
+              >
+                <span className="hd-pill-k">{tecsSel > 1 ? "Funcionarios" : "Funcionario"}</span>
+                <span className="hd-pill-v">
+                  : {tecsSel === 1 ? dim.tecs[st.tecs[0]] : `${tecsSel} funcionarios`}
+                </span>
                 <span className="hd-pill-ic" aria-hidden="true">
                   <X size={13} strokeWidth={2.4} />
                 </span>

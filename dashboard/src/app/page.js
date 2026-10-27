@@ -1184,6 +1184,8 @@ export default function Home() {
       d1: MAXDAY,
       minOrders: 10,
       hotspot: 60,
+      // Fallidas y efectivas visibles de nuevo: el usuario puede haber apagado una de las dos.
+      est: [true, true],
       barrios: [],
       selBarrio: null,
       tecs: [],
