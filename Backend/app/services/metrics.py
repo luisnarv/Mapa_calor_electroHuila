@@ -175,13 +175,18 @@ def _fila(nombre: str, c: Conteo) -> dict[str, Any]:
     return {"nombre": nombre, "ordenes": c.tot, "efectivas": c.ef, "fallidas": c.fa, "ef_pct": _pct(c.ef, c.tot)}
 
 
-def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str) -> dict[str, Any]:
-    """El recorte exacto sobre el que se calculó, para que quien responda lo cite."""
-    nombres = {}
+def nombres_filtros(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]:
+    """Los filtros ya resueltos, con el nombre exacto del catálogo (lista si se pidió una lista)."""
+    nombres: dict[str, Any] = {}
     for c, idx in _resolver_filtros(p, filtros).items():
         cat = getattr(p, DIMENSIONES[c][0])
         nombres[c] = [cat[i] for i in idx] if isinstance(filtros[c], (list, tuple)) else cat[idx[0]]
-    return {"periodo": etiqueta, "filtros": nombres}
+    return nombres
+
+
+def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str) -> dict[str, Any]:
+    """El recorte exacto sobre el que se calculó, para que quien responda lo cite."""
+    return {"periodo": etiqueta, "filtros": nombres_filtros(p, filtros)}
 
 
 def efectividad(p: Payload, filtros: Mapping[str, Filtro], mes: str | Sequence[str] | None = None) -> dict[str, Any]:

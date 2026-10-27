@@ -1124,6 +1124,51 @@ export default function Home() {
     setSt((prev) => conBarrios(prev, []));
   };
 
+  // El asistente pidió ver algo: aplica solo los filtros que trae (los demás se quedan) y, si hay
+  // municipios o técnicos, abre su detalle, igual que al hacer clic en el mapa.
+  const handleAccionChat = (accion) => {
+    if (!data || !accion) return;
+    const d = data.dim;
+    // Los nombres vienen del mismo catálogo que `dim`; uno que no esté se salta en vez de vaciar el tablero.
+    const idxDe = (lista, nombre) => {
+      const i = nombre && lista ? lista.indexOf(nombre) : -1;
+      return i >= 0 ? String(i) : null;
+    };
+    const indices = (lista, nombres) => (nombres || []).map((n) => lista.indexOf(n)).filter((i) => i >= 0);
+
+    // Un municipio del catálogo de barrios es una fila de dim.barrios; si alguno no la tiene
+    // (hay 42 municipios y 41 filas) se filtra por el desplegable en vez de seleccionarlo.
+    const munis = indices(d.munis, accion.municipios);
+    const barrios = d.barrios.map((_, b) => b).filter((b) => munis.includes(d.b_muni[b]));
+    const sinFila = munis.length === 1 && !barrios.length ? munis[0] : null;
+    const tecs = indices(d.tecs, accion.tecnicos);
+    const meses = (accion.meses || [])
+      .map((ym) => availableMonths.find((m) => m.ym === ym)?.key)
+      .filter(Boolean);
+
+    setSt((prev) => {
+      let next = { ...prev };
+      for (const [campo, lista, nombre] of [
+        ["zona", d.zonas, accion.zona],
+        ["brig", d.brigs, accion.causal],
+        ["tipo", d.tipos, accion.clase_servicio],
+        ["act", d.acts, accion.actividad],
+        ["ciclo", d.ciclos, accion.ciclo],
+        ["brigada", d.brigadas, accion.brigada],
+        ["tipoAct", d.tiposActividad, accion.tipo_actividad]
+      ]) {
+        const i = idxDe(lista, nombre);
+        if (i !== null) next[campo] = i;
+      }
+      if (sinFila !== null) next.muni = String(sinFila);
+      if (barrios.length) next = conBarrios(next, barrios);
+      if (tecs.length) next.tecs = tecs;
+      if (meses.length) next.months = meses;
+      next.activeTab = barrios.length || tecs.length ? "detalle" : "mapa";
+      return next;
+    });
+  };
+
   const handleReset = () => {
     setSt((prev) => ({
       ...prev,
@@ -1655,7 +1700,7 @@ export default function Home() {
           {rightPanelContent}
         </main>
 
-        <ChatBot vista={vistaChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
+        <ChatBot vista={vistaChat} onAccion={handleAccionChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
       </div>
     );
   }
@@ -1967,7 +2012,7 @@ export default function Home() {
         />
       </main>
 
-      <ChatBot vista={vistaChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
+      <ChatBot vista={vistaChat} onAccion={handleAccionChat} onToggle={(abierto) => abierto && setLayersCollapsed(true)} />
     </div>
   );
 }

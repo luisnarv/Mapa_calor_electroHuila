@@ -67,3 +67,4 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     content: str
     model: str
+    acciones: list[dict] = Field(default_factory=list, description="Filtros que el tablero debe aplicar.")

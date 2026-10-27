@@ -23,19 +23,28 @@ def _servicio():
 async def chat(request: ChatRequest) -> ChatResponse:
     """Devuelve la respuesta completa."""
     servicio = _servicio()
+    partes: list[str] = []
+    acciones: list[dict] = []
     try:
-        partes = [e["delta"] async for e in servicio.stream_chat(request) if "delta" in e]
+        async for e in servicio.stream_chat(request):
+            if "delta" in e:
+                partes.append(e["delta"])
+            elif "accion" in e:
+                acciones.append(e["accion"])
     except OpenAIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
-    return ChatResponse(content="".join(partes), model=request.model or servicio.modelo_por_defecto)
+    return ChatResponse(
+        content="".join(partes), model=request.model or servicio.modelo_por_defecto, acciones=acciones
+    )
 
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """Igual que `/chat`, pero por trozos vía SSE.
 
-    Eventos: `{"delta": "..."}` con un trozo de texto y `{"error": "..."}` si falla ya
-    empezado el flujo. Termina siempre con `data: [DONE]`.
+    Eventos: `{"delta": "..."}` con un trozo de texto, `{"accion": {...}}` con los filtros que el
+    tablero debe aplicar (al final) y `{"error": "..."}` si falla ya empezado el flujo. Termina
+    siempre con `data: [DONE]`.
     """
     servicio = _servicio()
 

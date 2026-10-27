@@ -59,9 +59,15 @@ class OpenAIService:
         return self._default_model
 
     async def stream_chat(self, request: ChatRequest) -> AsyncIterator[dict[str, Any]]:
-        """Emite `{"delta": ...}` con la respuesta; el ciclo de herramientas no sale a la red."""
+        """Emite `{"delta": ...}` con la respuesta y, al final, `{"accion": ...}` si hay que mover el mapa.
+
+        El ciclo de herramientas no sale a la red. La acción va después del texto: el tablero se mueve
+        al cerrar la respuesta, no a media redacción, y un turno lo mueve una sola vez (gana la última).
+        """
         model = request.model or self._default_model
         mensajes = self._mensajes(request)
+        accion: dict[str, Any] | None = None
+        respondio = False
         try:
             for ronda in range(MAX_RONDAS):
                 texto, llamadas = "", {}
@@ -73,20 +79,26 @@ class OpenAIService:
                         self._acumular(llamadas, parcial)
 
                 if not llamadas:
-                    return
+                    respondio = True
+                    break
                 mensajes.append(self._mensaje_asistente(texto, llamadas))
-                mensajes.extend(await self._resultados(llamadas, request.vista, self._ultimo_del_usuario(request)))
+                resultados, nueva = await self._resultados(llamadas, request.vista, self._ultimo_del_usuario(request))
+                mensajes.extend(resultados)
+                accion = nueva or accion
                 logger.info("Ronda %s: %s herramienta(s) ejecutada(s).", ronda + 1, len(llamadas))
 
             # Agotadas las rondas se pide una última respuesta SIN herramientas: cortar con
             # un aviso dejaría sin redactar a un modelo que ya tiene todos los datos delante.
-            vacio = True
-            async for delta, _ in self._ronda(model, mensajes, request, con_tools=False):
-                if delta:
-                    vacio = False
-                    yield {"delta": delta}
-            if vacio:
-                yield {"delta": AVISO_SIN_CIERRE}
+            if not respondio:
+                vacio = True
+                async for delta, _ in self._ronda(model, mensajes, request, con_tools=False):
+                    if delta:
+                        vacio = False
+                        yield {"delta": delta}
+                if vacio:
+                    yield {"delta": AVISO_SIN_CIERRE}
+            if accion:
+                yield {"accion": accion}
         except OpenAIServiceError:
             raise
         except Exception as exc:
@@ -148,11 +160,12 @@ class OpenAIService:
     @staticmethod
     async def _resultados(
         llamadas: dict[int, dict[str, str]], vista: VistaTablero | None, pidio: str
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
         p = payload_store.obtener(
             settings.DATA_DIR, settings.DOCS_UC_CAMPO, settings.DOCS_NI_CON_OBSERVACION
         )
         mensajes = []
+        accion = None
         for ll in llamadas.values():
             try:
                 args = json.loads(ll["args"] or "{}")
@@ -164,10 +177,12 @@ class OpenAIService:
                     args.pop("sin_filtros_de_pantalla")
                 # Recorrer el histórico completo es CPU pura: fuera del hilo del bucle de eventos.
                 resultado = await asyncio.to_thread(tools.ejecutar, ll["name"], args, p, vista)
+            # La acción es para el navegador, no para el modelo.
+            accion = resultado.pop("accion", None) or accion
             mensajes.append(
                 {"role": "tool", "tool_call_id": ll["id"], "content": json.dumps(resultado, ensure_ascii=False)}
             )
-        return mensajes
+        return mensajes, accion
 
     @staticmethod
     def _ultimo_del_usuario(request: ChatRequest) -> str:

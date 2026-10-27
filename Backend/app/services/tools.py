@@ -74,6 +74,12 @@ _FILTROS: dict[str, dict[str, Any]] = {
 
 _DIMENSION = {"type": "string", "enum": list(metrics.DIMENSIONES)}
 
+# Los filtros que tiene el mapa. El resto de dimensiones (causa, subacción, estrato) solo existen
+# para consultar: no hay dónde ponerlas en la pantalla.
+FILTROS_DEL_MAPA = (
+    "municipio", "zona", "ciclo", "tecnico", "brigada", "tipo_actividad", "causal", "clase_servicio", "actividad",
+)
+
 _DEFINICIONES = (
     (
         "efectividad",
@@ -130,6 +136,17 @@ _DEFINICIONES = (
         ["mes_a", "mes_b"],
     ),
     (
+        "filtrar_mapa",
+        "Pone filtros en el MAPA del usuario para que lo vea (la pantalla se mueve al terminar tu respuesta). "
+        "Úsala SOLO cuando pida ver, mostrar, filtrar o ir a algo («muéstrame Neiva», «filtra el ciclo 3»); "
+        "para una pregunta de datos no la uses. Solo cambia los filtros que pases: los demás se quedan como estaban.",
+        {
+            **{c: _FILTROS[c] for c in FILTROS_DEL_MAPA},
+            "mes": _MES,
+        },
+        [],
+    ),
+    (
         "valores_de",
         "Lista los nombres que existen en una dimensión (ciclos, causas, causales...) para filtrar con uno exacto "
         "cuando el usuario no lo dice igual.",
@@ -158,6 +175,34 @@ def _filtros(args: dict[str, Any]) -> dict[str, metrics.Filtro]:
     return {c: args.get(c) for c in metrics.DIMENSIONES}
 
 
+def _lista(v: Any) -> list[str]:
+    return [] if not v else [v] if isinstance(v, str) else list(v)
+
+
+def _filtrar_mapa(p: Payload, a: dict[str, Any]) -> dict[str, Any]:
+    """Valida los filtros contra el catálogo y arma la acción que el tablero aplicará.
+
+    La `accion` no es para el modelo: el servicio la saca del resultado y la manda al navegador al
+    final del turno, para que el mapa se mueva cuando la respuesta ya está escrita y no a medio camino.
+    """
+    nombres = metrics.nombres_filtros(p, {c: a.get(c) for c in FILTROS_DEL_MAPA})
+    meses = [p.meses[i] for i in metrics.resolver_meses(p, a["mes"])[0]] if a.get("mes") else []
+    if not nombres and not meses:
+        return {"error": "No dijiste qué filtrar. Pide un municipio, zona, ciclo, técnico, brigada o mes."}
+    accion = {
+        "tipo": "filtrar_mapa",
+        "municipios": _lista(nombres.get("municipio")),
+        "tecnicos": _lista(nombres.get("tecnico")),
+        "meses": meses,
+        **{c: nombres.get(c) for c in FILTROS_DEL_MAPA if c not in ("municipio", "tecnico")},
+    }
+    return {
+        "aplicado": {**nombres, **({"meses": meses} if meses else {})},
+        "nota": "El mapa se filtra al terminar tu respuesta; di qué filtraste.",
+        "accion": accion,
+    }
+
+
 def _ejecutar(nombre: str, p: Payload, a: dict[str, Any]) -> dict[str, Any]:
     if nombre == "efectividad":
         return metrics.efectividad(p, _filtros(a), a.get("mes"))
@@ -178,6 +223,8 @@ def _ejecutar(nombre: str, p: Payload, a: dict[str, Any]) -> dict[str, Any]:
         )
     if nombre == "valores_de":
         return metrics.valores_de(p, a["dimension"], a.get("texto"))
+    if nombre == "filtrar_mapa":
+        return _filtrar_mapa(p, a)
     raise KeyError(nombre)
 
 
@@ -205,7 +252,7 @@ def _con_pantalla(nombre: str, args: dict[str, Any], vista: VistaTablero | None)
     agrupa tampoco se filtra: un ranking por municipio con «Neiva» en pantalla sería una
     sola fila. `valores_de` no filtra nada, y las comparaciones traen sus propios meses.
     """
-    if vista is None or args.get("sin_filtros_de_pantalla") or nombre == "valores_de":
+    if vista is None or args.get("sin_filtros_de_pantalla") or nombre in ("valores_de", "filtrar_mapa"):
         return args, {}
     completos = dict(args)
     aplicados: dict[str, Any] = {}

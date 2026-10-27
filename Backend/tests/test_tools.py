@@ -5,7 +5,7 @@ from app.services import payload_store, tools
 
 def test_cada_herramienta_declara_sus_parametros():
     nombres = [t["function"]["name"] for t in tools.TOOLS]
-    assert nombres == ["efectividad", "ranking", "serie_mensual", "comparar_periodos", "valores_de"]
+    assert nombres == ["efectividad", "ranking", "serie_mensual", "comparar_periodos", "filtrar_mapa", "valores_de"]
     for t in tools.TOOLS:
         f = t["function"]
         assert set(f["parameters"]["required"]) <= set(f["parameters"]["properties"])
@@ -89,9 +89,9 @@ def test_el_servicio_descarta_la_bandera_si_el_usuario_no_la_pidio(payload, monk
 
     llamadas = {0: {"id": "c", "name": "efectividad", "args": json.dumps({"sin_filtros_de_pantalla": True})}}
     vista = VistaTablero(municipios=["Neiva"])
-    res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Cómo va 2026?"))
+    res, _ = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Cómo va 2026?"))
     assert json.loads(res[0]["content"])["ordenes"] == 18  # Neiva, no los 58 del total
-    res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Y en todo el departamento?"))
+    res, _ = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Y en todo el departamento?"))
     assert json.loads(res[0]["content"])["ordenes"] == 58
 
 
@@ -132,3 +132,36 @@ def test_varios_municipios_elegidos_se_suman(payload):
 def test_un_ranking_por_municipio_no_se_filtra_por_los_elegidos(payload):
     r = tools.ejecutar("ranking", {"dimension": "municipio", "min_ordenes": 1}, payload, VistaTablero(municipios=["Neiva"]))
     assert len(r["filas"]) == 2
+
+
+# --- filtrar_mapa -------------------------------------------------------------
+
+
+def test_filtrar_mapa_arma_la_accion_con_nombres_del_catalogo(payload):
+    r = tools.ejecutar("filtrar_mapa", {"municipio": ["neiva", "AIPE"], "zona": "norte", "mes": "2026-02"}, payload)
+    assert r["accion"] == {
+        "tipo": "filtrar_mapa", "municipios": ["Neiva", "Aipe"], "tecnicos": [], "meses": ["2026-02"],
+        "zona": "Norte", "ciclo": None, "brigada": None, "tipo_actividad": None,
+        "causal": None, "clase_servicio": None, "actividad": None,
+    }
+    assert r["aplicado"]["zona"] == "Norte"
+
+
+def test_filtrar_mapa_un_municipio_suelto_llega_como_lista(payload):
+    r = tools.ejecutar("filtrar_mapa", {"municipio": "Aipe"}, payload)
+    assert r["accion"]["municipios"] == ["Aipe"]
+
+
+def test_filtrar_mapa_sin_filtros_pide_que_diga_cual(payload):
+    assert "No dijiste qué filtrar" in tools.ejecutar("filtrar_mapa", {}, payload)["error"]
+
+
+def test_filtrar_mapa_no_filtra_a_ciegas_un_nombre_que_no_existe(payload):
+    r = tools.ejecutar("filtrar_mapa", {"municipio": "Atlántico"}, payload)
+    assert "error" in r and "accion" not in r
+
+
+def test_filtrar_mapa_no_hereda_los_filtros_de_pantalla(payload):
+    # Solo cambia lo que se le pide: completarlo con la pantalla le diría al tablero lo que ya tiene.
+    r = tools.ejecutar("filtrar_mapa", {"zona": "Norte"}, payload, VistaTablero(municipios=["Neiva"]))
+    assert r["accion"]["municipios"] == [] and "filtros_de_pantalla" not in r

@@ -107,3 +107,36 @@ def test_el_prompt_nombra_las_reglas_que_no_se_pueden_perder():
     p = settings.OPENAI_SYSTEM_PROMPT
     for regla in ("municipio", "pérdidas", "candidatos", "ef_pond", "base"):
         assert regla in p
+
+
+def test_la_accion_sale_al_final_y_no_se_le_cuenta_al_modelo():
+    import asyncio
+
+    cliente = ClienteFalso([
+        [_chunk(llamada=("c1", "filtrar_mapa", json.dumps({"municipio": "Aipe"})))],
+        [_chunk("Listo, filtré "), _chunk("Aipe.")],
+    ])
+
+    async def correr():
+        servicio = OpenAIService(cliente, "modelo-falso", "PROMPT")
+        req = ChatRequest(messages=[Message(role="user", content="Muéstrame Aipe")])
+        return [e async for e in servicio.stream_chat(req)]
+
+    eventos = asyncio.run(correr())
+    assert [list(e) for e in eventos] == [["delta"], ["delta"], ["accion"]]  # la acción, después del texto
+    assert eventos[-1]["accion"]["municipios"] == ["Aipe"]
+    resultado = next(m for m in cliente.llamadas[1]["messages"] if m["role"] == "tool")
+    assert "accion" not in json.loads(resultado["content"])
+    assert json.loads(resultado["content"])["aplicado"] == {"municipio": "Aipe"}
+
+
+def test_sin_filtrar_el_mapa_no_hay_accion():
+    import asyncio
+
+    cliente = ClienteFalso([[_chunk("Hola")]])
+
+    async def correr():
+        req = ChatRequest(messages=[Message(role="user", content="hola")])
+        return [e async for e in OpenAIService(cliente, "m", "P").stream_chat(req)]
+
+    assert [list(e) for e in asyncio.run(correr())] == [["delta"]]

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Check, Copy, MessageSquare, Maximize2, Mic, Minus, Pin, PinOff, Send, X } from "lucide-react";
+import { Bot, Check, Copy, Crosshair, MessageSquare, Maximize2, Mic, Minus, Pin, PinOff, Send, X } from "lucide-react";
 
 const BUBBLE = 56;
 const MARGIN = 20;
@@ -79,6 +79,24 @@ function horaDe(marca) {
   return new Date(marca).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/** Convierte el filtro que el asistente puso en el mapa en una línea legible. Null si no filtra nada. */
+function resumirFiltro(a) {
+  const lista = (v, varios) => (!v?.length ? null : v.length <= 2 ? v.join(", ") : `${v.length} ${varios}`);
+  const partes = [
+    lista(a.municipios, "municipios"),
+    lista(a.tecnicos, "técnicos"),
+    a.zona,
+    a.ciclo,
+    a.brigada,
+    a.tipo_actividad,
+    a.causal,
+    a.clase_servicio,
+    a.actividad,
+    a.meses?.join(", ")
+  ].filter(Boolean);
+  return partes.length ? partes.join(" · ") : null;
+}
+
 /** Copiar la respuesta. Sin permiso de portapapeles el botón simplemente no confirma. */
 function Acciones({ texto }) {
   const [copiado, setCopiado] = useState(false);
@@ -141,12 +159,13 @@ async function leerFlujo(respuesta, alEvento) {
 }
 
 /**
- * @param {{ vista?: object|null, onToggle?: (abierto: boolean) => void }} props
+ * @param {{ vista?: object|null, onAccion?: (accion: object) => void, onToggle?: (abierto: boolean) => void }} props
  *   `vista` son los filtros que el usuario tiene en pantalla (en nombres). Se lee al enviar,
  *   no al montar: el tablero cambia de filtros sin avisar al chat.
+ *   `onAccion` recibe los filtros que el asistente pide poner en el mapa.
  *   `onToggle` avisa al tablero para que repliegue lo que flota debajo (el panel de capas).
  */
-export default function ChatBot({ vista, onToggle }) {
+export default function ChatBot({ vista, onAccion, onToggle }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -184,10 +203,15 @@ export default function ChatBot({ vista, onToggle }) {
   const vozRef = useRef(null);
   const previoRef = useRef("");
 
+  // El último filtro que el asistente puso en el mapa, para poder volver a ponerlo si el usuario lo limpió.
+  const [filtroAplicado, setFiltroAplicado] = useState(null);
+
   const vistaRef = useRef(vista);
+  const accionRef = useRef(onAccion);
   useEffect(() => {
     vistaRef.current = vista;
-  }, [vista]);
+    accionRef.current = onAccion;
+  }, [vista, onAccion]);
 
   useEffect(() => {
     onToggle?.(open);
@@ -401,6 +425,13 @@ export default function ChatBot({ vista, onToggle }) {
         await leerFlujo(res, (e) => {
           if (e.error) throw new Error(e.error);
           if (e.delta) appendToLast(e.delta);
+          // Llega al final del flujo, con el texto ya escrito: el mapa se mueve al cerrar la respuesta.
+          if (e.accion) {
+            accionRef.current?.(e.accion);
+            // Se guarda la acción completa, no solo su resumen: el chip la vuelve a aplicar.
+            const resumen = resumirFiltro(e.accion);
+            if (resumen) setFiltroAplicado({ accion: e.accion, resumen });
+          }
         });
       } catch (err) {
         if (err.name === "AbortError") return;
@@ -636,6 +667,21 @@ export default function ChatBot({ vista, onToggle }) {
                     </React.Fragment>
                   );
                 })}
+
+                {filtroAplicado && (
+                  <button
+                    type="button"
+                    className="cb-filtro"
+                    onClick={() => accionRef.current?.(filtroAplicado.accion)}
+                    title="Volver a aplicar este filtro en el mapa"
+                    aria-label={`Volver a aplicar el filtro: ${filtroAplicado.resumen}`}
+                  >
+                    <Crosshair size={12} strokeWidth={2.2} aria-hidden="true" />
+                    <span>
+                      Mapa filtrado: <b>{filtroAplicado.resumen}</b>
+                    </span>
+                  </button>
+                )}
               </div>
 
               <footer className="cb-foot">
