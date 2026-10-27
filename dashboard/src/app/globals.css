@@ -1210,3 +1210,30 @@ table.cmp td:first-child{text-align:left}
 @media(max-width:640px){
   .cb-panel{left:10px!important;right:10px!important;width:auto!important}
 }
+
+/* Detalle de varios técnicos: acumulado o por separado. */
+.multi-modo{display:flex;gap:4px;margin-bottom:12px;padding:3px;border:1px solid var(--line2);
+  border-radius:var(--r);background:var(--bg)}
+.mm-seg{flex:1;padding:5px 8px;border:none;border-radius:var(--r-sm);background:transparent;
+  color:var(--dim);font:600 11px var(--ff);cursor:pointer}
+.mm-seg.on{background:var(--accent-wash);color:var(--cu2)}
+.multi-b{border:1px solid var(--line);border-radius:var(--r);margin-bottom:10px;padding:8px 10px}
+.multi-b>summary{cursor:pointer;font-weight:600;font-size:12px;margin-bottom:8px}
+.multi-b>summary .dim{font-weight:400;color:var(--dim);font-size:10.5px;margin-left:6px}
+/* Selector de varios técnicos/gestores, dentro de su pestaña. */
+.sm-wrap{margin-bottom:12px}
+.sm-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.sm-head label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.sm-quitar{font-size:10px;color:var(--cu2);background:none;border:none;cursor:pointer;font-weight:600;padding:0}
+.sm-quitar:hover{text-decoration:underline}
+.sm-buscar{width:100%;box-sizing:border-box;margin-bottom:6px;padding:6px 8px;border-radius:var(--r-sm);
+  border:1px solid var(--line2);background:var(--bg);color:var(--tx);font:400 11.5px var(--ff)}
+.sm-buscar:focus{outline:none;border-color:var(--cu)}
+.sm-lista{display:flex;flex-direction:column;gap:3px;max-height:190px;overflow-y:auto}
+.sm-item{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:var(--r-sm);
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;font:400 11px var(--ff);min-width:0}
+.sm-item.on{background:var(--accent-wash);border-color:var(--cu);color:var(--tx)}
+.sm-item input[type=checkbox]{width:12px;height:12px;flex:0 0 auto;margin:0;accent-color:var(--cu);cursor:pointer}
+.sm-nombre{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sm-extra{flex:0 0 auto;font-family:var(--ff-num);font-variant-numeric:tabular-nums;font-size:10px}
+.sm-vacio{font-size:10.5px;color:var(--dim);padding:6px 2px}

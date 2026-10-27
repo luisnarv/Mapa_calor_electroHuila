@@ -609,12 +609,15 @@ export default function LeafletMap({
       const sets = [[], []];
       const pts = [];
       const I = A.IDX || [];
+      // Con técnicos elegidos, sus puntos y nada más.
+      const selTec = st.tecs?.length ? new Set(st.tecs) : null;
 
       for (let j = 0; j < I.length; j++) {
         const i = I[j];
         const e = st.E_raw[i];
         if (!vis[e]) continue;
         if (st.selBarrio !== null && st.B_raw[i] !== st.selBarrio) continue;
+        if (selTec && !selTec.has(st.T_raw[i])) continue;
         if (st.layers.heat) {
           const lt = st.lat(i);
           const ln = st.lon(i);
@@ -670,6 +673,9 @@ export default function LeafletMap({
 
         for (const [b, o] of A.barrio) {
           if (sel != null && b !== sel) continue;
+          // Con técnicos elegidos solo salen los municipios donde trabajaron. La burbuja conserva
+          // las cifras de TODO el municipio: el agregado por municipio no se parte por técnico.
+          if (selTec && ![...selTec].some((t) => o.tec.has(t))) continue;
 
           const c = geo.bc[b];
           if (!c) continue;
@@ -733,7 +739,7 @@ export default function LeafletMap({
     } else {
       if (map.hasLayer(ptLayerRef.current)) map.removeLayer(ptLayerRef.current);
     }
-  }, [A, st.layers, st.est, st.hotspot, st.selBarrio, st.ciclo, ciclosGeo, theme]);
+  }, [A, st.layers, st.est, st.hotspot, st.selBarrio, st.tecs, st.ciclo, ciclosGeo, theme]);
 
   // 2 bis. Órdenes POR EJECUTAR del archivo cargado en el chat.
   //

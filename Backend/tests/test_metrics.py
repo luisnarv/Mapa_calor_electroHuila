@@ -99,3 +99,19 @@ def test_filtra_y_agrupa_por_tipo_de_actividad(payload):
     assert metrics.efectividad(payload, {"tipo_actividad": "poste"})["ordenes"] == 58
     r = metrics.ranking(payload, "tipo_actividad", {}, min_ordenes=1)
     assert [f["nombre"] for f in r["filas"]] == ["Suspensión en poste / con moto"]
+
+
+def test_varios_tecnicos_se_suman(payload):
+    # En el payload de prueba todas las órdenes son del técnico «6044»; «0» no tiene ninguna.
+    solo = metrics.efectividad(payload, {"tecnico": "6044"})
+    assert solo["ordenes"] == 58 and solo["base"]["filtros"] == {"tecnico": "6044"}
+    ambos = metrics.efectividad(payload, {"tecnico": ["0", "6044"]})
+    assert ambos["ordenes"] == 58
+    # Con una lista el recorte se cita como lista, aunque traiga un solo nombre.
+    assert ambos["base"]["filtros"] == {"tecnico": ["0", "6044"]}
+    assert metrics.efectividad(payload, {"tecnico": ["0"]})["ordenes"] == 0
+
+
+def test_un_tecnico_de_la_lista_que_no_resuelve_frena_todo(payload):
+    with pytest.raises(metrics.FiltroNoResuelto):
+        metrics.efectividad(payload, {"tecnico": ["6044", "no existe"]})

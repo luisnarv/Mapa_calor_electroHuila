@@ -43,7 +43,13 @@ _FILTROS: dict[str, dict[str, Any]] = {
     "municipio": _filtro("Municipio del Huila, p. ej. 'Neiva', 'Garzón'. Es la unidad del mapa."),
     "zona": _filtro("Zona: Centro, Norte, Occidente o Sur."),
     "ciclo": _filtro("Ciclo de suspensión, por su número («3») o por parte del nombre. Ver `valores_de`."),
-    "tecnico": _filtro("Funcionario, por su nombre (completo o parcial) o por su código si solo lo tiene, p. ej. '6044'."),
+    "tecnico": {
+        "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+        "description": (
+            "Funcionario, por su nombre (completo o parcial) o por su código si solo lo tiene, p. ej. "
+            "'6044'. Varios: pasa una LISTA y las cifras salen sumadas de todos."
+        ),
+    },
     "brigada": _filtro("Tipo de brigada: MOTO, CAMIONETA, MOTO - DOBLE MOTO, CUALQUIERA, SIN DATO."),
     "tipo_actividad": _filtro(
         "Tipo de actividad del mapa: qué se hizo y con qué brigada, p. ej. «Suspensión en gabinete / con moto». "
@@ -142,7 +148,7 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def _filtros(args: dict[str, Any]) -> dict[str, str | None]:
+def _filtros(args: dict[str, Any]) -> dict[str, metrics.Filtro]:
     return {c: args.get(c) for c in metrics.DIMENSIONES}
 
 

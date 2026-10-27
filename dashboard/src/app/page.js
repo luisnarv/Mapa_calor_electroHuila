@@ -86,7 +86,8 @@ export default function Home() {
     minOrders: 10,
     hotspot: 60,
     selBarrio: null,
-    selTec: null,
+    tecs: [],
+    vistaMultiTec: "acumulado",
     selNic: null,
     tab: "barrio",
     dock: "tendencias",
@@ -145,7 +146,7 @@ export default function Home() {
       d0: 0,
       d1: maxD,
       selBarrio: null,
-      selTec: null,
+      tecs: [],
       selNic: null,
       months: recent ? [recent.label] : []
     }));
@@ -486,7 +487,9 @@ export default function Home() {
   }, [data, rawArrays, monthMap, st.zona, st.muni, st.brig, st.tipo, st.act, st.ciclo, st.brigada, st.tipoAct, st.months]);
 
   // 2. AGGREGATION ENGINE
-  const A = useMemo(() => {
+  // Agrega las órdenes de `IDX` (posiciones del recorte). Se llama con el recorte completo y,
+  // aparte, con el de los técnicos elegidos para su acumulado.
+  const agregar = useCallback((IDX) => {
     const defaultAgg = {
       tot: 0,
       ef: 0,
@@ -639,7 +642,17 @@ export default function Home() {
 
     A.IDX = IDX;
     return A;
-  }, [IDX, rawArrays, data]);
+  }, [rawArrays, data]);
+
+  const A = useMemo(() => agregar(IDX), [agregar, IDX]);
+
+  // Lo mismo, solo con las órdenes de los técnicos elegidos: es el acumulado del detalle.
+  const AselTec = useMemo(() => {
+    if (!st.tecs || st.tecs.length < 2 || !rawArrays) return null;
+    const sel = new Set(st.tecs);
+    const Tc = rawArrays.T;
+    return agregar(IDX.filter((i) => sel.has(Tc[i])));
+  }, [agregar, IDX, rawArrays, st.tecs]);
 
   // 3. RISK ENGINE (0-100)
   const ELIG = useMemo(() => {
@@ -1099,7 +1112,7 @@ export default function Home() {
       minOrders: 10,
       hotspot: 60,
         selBarrio: null,
-      selTec: null,
+      tecs: [],
       // Vuelve al mes en curso (mantiene el arranque liviano; los históricos se
       // vuelven a descargar solo si se seleccionan).
       months: (() => {
@@ -1190,7 +1203,7 @@ export default function Home() {
     municipio: st.selBarrio != null ? nombreDe(dimV.munis, dimV.b_muni?.[st.selBarrio]) : nombreDe(dimV.munis, st.muni),
     zona: nombreDe(dimV.zonas, st.zona),
     ciclo: nombreDe(dimV.ciclos, st.ciclo),
-    tecnico: nombreDe(dimV.tecs, st.selTec),
+    tecnicos: (st.tecs || []).map((i) => dimV.tecs[i]).filter(Boolean),
     brigada: nombreDe(dimV.brigadas, st.brigada),
     tipo_actividad: nombreDe(dimV.tiposActividad, st.tipoAct),
     causal: nombreDe(dimV.brigs, st.brig),
@@ -1241,6 +1254,7 @@ export default function Home() {
             dayLabel={dayLabel}
             recommend={recommend}
             techRoute={techRoute}
+            AselTec={AselTec}
             zoneAvg={zoneAvg}
             actionsFor={actionsFor}
             onFilterChange={handleFilterChange}
@@ -1907,6 +1921,7 @@ export default function Home() {
           dayLabel={dayLabel}
           recommend={recommend}
           techRoute={techRoute}
+            AselTec={AselTec}
           zoneAvg={zoneAvg}
           actionsFor={actionsFor}
           onFilterChange={handleFilterChange}

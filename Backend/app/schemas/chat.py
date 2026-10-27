@@ -25,7 +25,7 @@ class VistaTablero(BaseModel):
     municipio: str | None = None
     zona: str | None = None
     ciclo: str | None = None
-    tecnico: str | None = None
+    tecnicos: list[str] = Field(default_factory=list, description="Técnicos elegidos a la vez en el tablero.")
     brigada: str | None = None
     tipo_actividad: str | None = None
     causal: str | None = None
@@ -37,12 +37,16 @@ class VistaTablero(BaseModel):
         default_factory=list, description="Claves YYYY-MM"
     )
 
-    def filtros(self) -> dict[str, str]:
-        """Solo los filtros de catálogo puestos, sin los meses."""
-        return {k: v for k, v in self.model_dump(exclude={"meses"}).items() if v}
+    def filtros(self) -> dict[str, str | list[str]]:
+        """Solo los filtros de catálogo puestos, sin los meses. Los técnicos van con el nombre del filtro."""
+        puestos = {k: v for k, v in self.model_dump(exclude={"meses", "tecnicos"}).items() if v}
+        return {**puestos, "tecnico": self.tecnicos} if self.tecnicos else puestos
 
     def resumen(self) -> str:
-        partes = [f"{k.replace('_', ' ')}: {v}" for k, v in self.filtros().items()]
+        partes = [
+            f"{k.replace('_', ' ')}{'s' if k == 'tecnico' else ''}: {'; '.join(v) if isinstance(v, list) else v}"
+            for k, v in self.filtros().items()
+        ]
         if self.meses:
             partes.append(f"meses: {', '.join(self.meses)}")
         return " · ".join(partes)

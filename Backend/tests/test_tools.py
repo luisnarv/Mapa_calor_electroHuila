@@ -102,3 +102,18 @@ def test_la_vista_rechaza_meses_que_no_son_clave():
     assert VistaTablero(meses=["2026-10"]).meses == ["2026-10"]
     with pytest.raises(ValidationError):
         VistaTablero(meses=["Octubre de 2026"])
+
+
+def test_los_tecnicos_elegidos_en_pantalla_llegan_como_lista(payload):
+    vista = VistaTablero(tecnicos=["0", "6044"])
+    assert vista.filtros() == {"tecnico": ["0", "6044"]}
+    assert vista.resumen() == "tecnicos: 0; 6044"
+    r = tools.ejecutar("efectividad", {}, payload, vista)
+    assert r["ordenes"] == 58
+    assert r["filtros_de_pantalla"] == {"tecnico": ["0", "6044"]}
+
+
+def test_un_ranking_por_tecnico_no_se_filtra_por_los_elegidos(payload):
+    vista = VistaTablero(tecnicos=["0"])
+    r = tools.ejecutar("ranking", {"dimension": "tecnico", "min_ordenes": 1}, payload, vista)
+    assert [f["nombre"] for f in r["filas"]] == ["6044"]

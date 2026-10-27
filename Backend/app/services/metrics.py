@@ -39,6 +39,10 @@ DIMENSIONES: dict[str, tuple[str, str]] = {
 PESO_PREVIO = 50
 
 
+# Un filtro es un nombre, o varios (los técnicos elegidos a la vez en el tablero).
+Filtro = str | Sequence[str] | None
+
+
 class FiltroNoResuelto(Exception):
     """Un filtro de catálogo no resolvió a un único valor: no existe o encaja en varios.
 
@@ -127,25 +131,28 @@ def _ponderada(ef: int, tot: int, media: float) -> float:
     return round((ef + PESO_PREVIO * media) / (tot + PESO_PREVIO) * 100, 1)
 
 
-def _resolver_filtros(p: Payload, filtros: Mapping[str, str | None]) -> dict[str, int]:
-    resueltos: dict[str, int] = {}
+def _resolver_filtros(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, tuple[int, ...]]:
+    """Cada filtro a los índices de su catálogo. Una lista (varios técnicos elegidos) suma todos."""
+    resueltos: dict[str, tuple[int, ...]] = {}
     for campo, valor in filtros.items():
-        if valor in (None, ""):
+        if valor in (None, "", [], ()):
             continue
         if campo not in DIMENSIONES:
             raise KeyError(campo)
-        resueltos[campo] = resolver(getattr(p, DIMENSIONES[campo][0]), valor, campo)
+        catalogo = getattr(p, DIMENSIONES[campo][0])
+        pedidos = [valor] if isinstance(valor, str) else list(valor)
+        resueltos[campo] = tuple(dict.fromkeys(resolver(catalogo, v, campo) for v in pedidos))
     return resueltos
 
 
 def agrupar(
     p: Payload,
-    filtros: Mapping[str, str | None],
+    filtros: Mapping[str, Filtro],
     meses: Sequence[int],
     por: str | None = None,
 ) -> dict[int | None, Conteo]:
     """Cuenta las órdenes del recorte, en un solo grupo (`None`) o una por valor de `por`."""
-    checks = [(getattr(p, DIMENSIONES[c][1]), v) for c, v in _resolver_filtros(p, filtros).items()]
+    checks = [(getattr(p, DIMENSIONES[c][1]), frozenset(v)) for c, v in _resolver_filtros(p, filtros).items()]
     col_por = getattr(p, DIMENSIONES[por][1]) if por else None
     en_meses = set(meses)
     todos = len(en_meses) == len(p.meses)
@@ -155,7 +162,7 @@ def agrupar(
     for i in range(len(e)):
         if not todos and mes[i] not in en_meses:
             continue
-        if any(col[i] != v for col, v in checks):
+        if any(col[i] not in v for col, v in checks):
             continue
         g = grupos.setdefault(col_por[i] if col_por is not None else None, Conteo())
         g.tot += 1
@@ -168,15 +175,16 @@ def _fila(nombre: str, c: Conteo) -> dict[str, Any]:
     return {"nombre": nombre, "ordenes": c.tot, "efectivas": c.ef, "fallidas": c.fa, "ef_pct": _pct(c.ef, c.tot)}
 
 
-def _base(p: Payload, filtros: Mapping[str, str | None], etiqueta: str) -> dict[str, Any]:
+def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str) -> dict[str, Any]:
     """El recorte exacto sobre el que se calculó, para que quien responda lo cite."""
-    nombres = {
-        c: getattr(p, DIMENSIONES[c][0])[i] for c, i in _resolver_filtros(p, filtros).items()
-    }
+    nombres = {}
+    for c, idx in _resolver_filtros(p, filtros).items():
+        cat = getattr(p, DIMENSIONES[c][0])
+        nombres[c] = [cat[i] for i in idx] if isinstance(filtros[c], (list, tuple)) else cat[idx[0]]
     return {"periodo": etiqueta, "filtros": nombres}
 
 
-def efectividad(p: Payload, filtros: Mapping[str, str | None], mes: str | Sequence[str] | None = None) -> dict[str, Any]:
+def efectividad(p: Payload, filtros: Mapping[str, Filtro], mes: str | Sequence[str] | None = None) -> dict[str, Any]:
     meses, etiqueta = resolver_meses(p, mes)
     c = agrupar(p, filtros, meses).get(None, Conteo())
     return {**_fila("total", c), "base": _base(p, filtros, etiqueta)}
@@ -189,7 +197,7 @@ CRITERIOS = ("ef_pct", "ef_pond", "fallidas", "pct_fallidas", "volumen", "efecti
 def ranking(
     p: Payload,
     dimension: str,
-    filtros: Mapping[str, str | None],
+    filtros: Mapping[str, Filtro],
     mes: str | Sequence[str] | None = None,
     ordenar_por: str = "ef_pond",
     peores: bool = False,
@@ -239,7 +247,7 @@ def ranking(
     }
 
 
-def serie_mensual(p: Payload, filtros: Mapping[str, str | None]) -> dict[str, Any]:
+def serie_mensual(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]:
     meses, etiqueta = resolver_meses(p, None)
     por_mes = {m: Conteo() for m in meses}
     for m in meses:
@@ -254,7 +262,7 @@ def comparar_periodos(
     p: Payload,
     mes_a: str | Sequence[str],
     mes_b: str | Sequence[str],
-    filtros: Mapping[str, str | None],
+    filtros: Mapping[str, Filtro],
     dimension: str | None = None,
     min_ordenes: int = 10,
     limite: int = 10,

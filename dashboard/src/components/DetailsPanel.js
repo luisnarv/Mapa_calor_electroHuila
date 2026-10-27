@@ -1,5 +1,6 @@
 "use client";
 
+import SelectorMultiple from "@/components/SelectorMultiple";
 import React, { useState } from "react";
 import { Info, Star } from "lucide-react";
 
@@ -14,6 +15,7 @@ export default function DetailsPanel({
   dayLabel,
   recommend,
   techRoute,
+  AselTec,
   zoneAvg,
   actionsFor,
   onFilterChange,
@@ -549,24 +551,12 @@ export default function DetailsPanel({
   };
 
   // --- 2. TECNICO PANEL ---
-  const renderTecnico = () => {
-    const opts = [...A.tec.entries()]
-      .sort((a, b) => b[1].tot - a[1].tot)
-      .map(([t]) => (
-        <option key={t} value={t}>
-          {dim.tecs[t]}
-        </option>
-      ));
+  // El análisis de un técnico, o el acumulado de varios: `o` es su agregado y `R` su recorrido
+  // (solo existe cuando es uno).
+  const cuerpoTecnico = (o, R) => {
+    let body = null;
 
-    let body = (
-      <p className="empty">
-        Selecciona un {V.tecnicoMin || "técnico"} para ver su cobertura, recorrido y desempeño.
-      </p>
-    );
-
-    if (st.selTec != null && A.tec.has(st.selTec)) {
-      const o = A.tec.get(st.selTec);
-      const R = techRoute(st.selTec);
+    if (o) {
       const mainBrigList = [...o.brig.entries()].sort((a, b) => b[1] - a[1]);
       const mainBrig = mainBrigList.length ? mainBrigList[0][0] : null;
       const bo = mainBrig ? A.brig.get(mainBrig) : null;
@@ -591,24 +581,26 @@ export default function DetailsPanel({
               <b className="warn">{pct(o.faPct)}%</b>
             </div>
           </div>
-          <div className="mini-grid">
-            <div className="mini">
-              <span>Efectividad</span>
-              <b className="ok">{pct(o.efPct)}%</b>
+          {R && (
+            <div className="mini-grid">
+              <div className="mini">
+                <span>Efectividad</span>
+                <b className="ok">{pct(o.efPct)}%</b>
+              </div>
+              <div className="mini">
+                <span>Distancia</span>
+                <b>{num(R.km)} km</b>
+              </div>
+              <div className="mini">
+                <span>Mediana por {V.ordenMin || "orden"}</span>
+                <b>{num(R.medMin)} min</b>
+              </div>
+              <div className="mini">
+                <span>Días en campo</span>
+                <b>{num(R.days)}</b>
+              </div>
             </div>
-            <div className="mini">
-              <span>Distancia</span>
-              <b>{num(R.km)} km</b>
-            </div>
-            <div className="mini">
-              <span>Mediana por {V.ordenMin || "orden"}</span>
-              <b>{num(R.medMin)} min</b>
-            </div>
-            <div className="mini">
-              <span>Días en campo</span>
-              <b>{num(R.days)}</b>
-            </div>
-          </div>
+          )}
 
           <h3>Distribución de resultados</h3>
           <div className="dist-bar">
@@ -681,21 +673,71 @@ export default function DetailsPanel({
       );
     }
 
+    return body;
+  };
+
+  const renderTecnico = () => {
+    // Los elegidos que siguen con órdenes con los filtros actuales.
+    const sel = (st.tecs || []).filter((t) => A.tec.has(t));
+    const opciones = [...A.tec.entries()]
+      .sort((x, y) => y[1].tot - x[1].tot)
+      .map(([t, o]) => ({ valor: t, texto: dim.tecs[t], extra: num(o.tot) }));
+
+    let body;
+    if (!sel.length) {
+      body = (
+        <p className="empty">
+          Selecciona uno o varios {V.tecnicosMin || "técnicos"} para ver su cobertura, recorrido y desempeño.
+        </p>
+      );
+    } else if (sel.length === 1 || !AselTec) {
+      body = cuerpoTecnico(A.tec.get(sel[0]), techRoute(sel[0]));
+    } else {
+      // Varios: lo acumulado, o cada uno por separado.
+      const modo = st.vistaMultiTec === "separado" ? "separado" : "acumulado";
+      const grupo = {
+        tot: AselTec.tot, ef: AselTec.ef, fa: AselTec.fa,
+        efPct: AselTec.efPct, faPct: AselTec.faPct,
+        brig: new Map([...AselTec.brig].map(([g, x]) => [g, x.tot])),
+        barrios: new Set(AselTec.barrio.keys()),
+        causa: AselTec.causa
+      };
+      body = (
+        <>
+          <div className="multi-modo" role="tablist" aria-label="Cómo ver los elegidos">
+            {[["acumulado", "Acumulado"], ["separado", "Por separado"]].map(([valor, texto]) => (
+              <button
+                key={valor}
+                type="button"
+                role="tab"
+                aria-selected={modo === valor}
+                className={`mm-seg${modo === valor ? " on" : ""}`}
+                onClick={() => onFilterChange("vistaMultiTec", valor)}
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
+          {modo === "acumulado"
+            ? cuerpoTecnico(grupo)
+            : sel.map((t, i) => (
+                <details key={t} className="multi-b" open={i === 0}>
+                  <summary>{dim.tecs[t]}</summary>
+                  {cuerpoTecnico(A.tec.get(t), techRoute(t))}
+                </details>
+              ))}
+        </>
+      );
+    }
+
     return (
       <>
-        <div className="sel-wrap">
-          <label>{V.tecnico || "Técnico"}</label>
-          <select
-            id="tecSel"
-            value={st.selTec ?? ""}
-            onChange={(e) =>
-              onFilterChange("selTec", e.target.value === "" ? null : +e.target.value)
-            }
-          >
-            <option value="">— elegir —</option>
-            {opts}
-          </select>
-        </div>
+        <SelectorMultiple
+          etiqueta={V.tecnico || "Técnico"}
+          opciones={opciones}
+          elegidos={sel}
+          onCambio={(lista) => onFilterChange("tecs", lista)}
+        />
         {body}
       </>
     );
