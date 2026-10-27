@@ -16,6 +16,7 @@ export default function DetailsPanel({
   recommend,
   techRoute,
   AselTec,
+  Asel,
   zoneAvg,
   actionsFor,
   onFilterChange,
@@ -78,8 +79,11 @@ export default function DetailsPanel({
   };
 
   // --- 1. MUNICIPIO / GLOBAL PANEL ---
-  const renderBarrio = () => {
-    const b = st.selBarrio;
+  // `AA` y `EE` son los datos sobre los que se calcula: todos, o solo los municipios elegidos
+  // (`multi`) cuando se ven acumulados.
+  const renderBarrioDe = (b, AA, EE, multi = null) => {
+    const A = AA;
+    const ELIG = EE;
 
     // GLOBAL OVERVIEW
     if (b == null) {
@@ -89,7 +93,7 @@ export default function DetailsPanel({
         .sort((x, y) => y[1] - x[1]);
       const topRisky = ELIG.slice()
         .sort((x, y) => (y[1].risk ?? -1) - (x[1].risk ?? -1))
-        .slice(0, 5);
+        .slice(0, multi ? 10 : 5);
       const subRows = [...A.sub.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
       return (
@@ -107,13 +111,19 @@ export default function DetailsPanel({
                 fontWeight: "600"
               }}
             >
-              GLO
+              {multi ? multi.n : "GLO"}
             </div>
             <div>
-              <h2>Resumen de Operación</h2>
+              <h2>{multi ? "Resumen acumulado" : "Resumen de Operación"}</h2>
               <span className="pb-sub">
-                {st.zona === "" ? "Todo el departamento" : "Zona: " + dim.zonas[+st.zona]}{" "}
-                &middot; {st.muni === "" ? "Todos los municipios" : dim.munis[+st.muni]}
+                {multi ? (
+                  multi.nombres
+                ) : (
+                  <>
+                    {st.zona === "" ? "Todo el departamento" : "Zona: " + dim.zonas[+st.zona]}{" "}
+                    &middot; {st.muni === "" ? "Todos los municipios" : dim.munis[+st.muni]}
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -546,6 +556,45 @@ export default function DetailsPanel({
           ]),
           [V.subaccion || "Subacción", "Efectivas", "Part."]
         )}
+      </>
+    );
+  };
+
+  const renderBarrio = () => {
+    const sel = st.barrios || [];
+    if (sel.length < 2 || !Asel) return renderBarrioDe(st.selBarrio, A, ELIG);
+
+    // Varios municipios: lo acumulado, o cada uno por separado.
+    const elegidos = new Set(sel);
+    const modo = st.vistaMulti === "separado" ? "separado" : "acumulado";
+    const nombres = sel.length <= 3 ? sel.map(barrioName).join(", ") : `${sel.length} municipios seleccionados`;
+    return (
+      <>
+        <div className="multi-modo" role="tablist" aria-label="Cómo ver los municipios elegidos">
+          {[["acumulado", "Acumulado"], ["separado", "Por separado"]].map(([valor, texto]) => (
+            <button
+              key={valor}
+              type="button"
+              role="tab"
+              aria-selected={modo === valor}
+              className={`mm-seg${modo === valor ? " on" : ""}`}
+              onClick={() => onFilterChange("vistaMulti", valor)}
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
+
+        {modo === "acumulado"
+          ? renderBarrioDe(null, Asel, ELIG.filter(([b]) => elegidos.has(b)), { n: sel.length, nombres })
+          : sel.map((b, i) => (
+              <details key={b} className="multi-b" open={i === 0}>
+                <summary>
+                  {barrioName(b)} <span className="dim">{barrioMuni(b)}</span>
+                </summary>
+                {renderBarrioDe(b, A, ELIG)}
+              </details>
+            ))}
       </>
     );
   };

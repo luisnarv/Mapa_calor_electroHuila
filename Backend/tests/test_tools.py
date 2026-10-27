@@ -38,27 +38,27 @@ from app.schemas.chat import VistaTablero  # noqa: E402
 
 
 def test_los_filtros_de_pantalla_se_aplican_si_el_modelo_no_pide_otro_lugar(payload):
-    vista = VistaTablero(municipio="Neiva", meses=["2026-02"])
+    vista = VistaTablero(municipios=["Neiva"], meses=["2026-02"])
     r = tools.ejecutar("efectividad", {}, payload, vista)
     assert (r["ordenes"], r["ef_pct"]) == (10, 50.0)
-    assert r["filtros_de_pantalla"] == {"municipio": "Neiva", "meses": ["2026-02"]}
-    assert r["base"] == {"periodo": "2026-02", "filtros": {"municipio": "Neiva"}}
+    assert r["filtros_de_pantalla"] == {"municipio": ["Neiva"], "meses": ["2026-02"]}
+    assert r["base"] == {"periodo": "2026-02", "filtros": {"municipio": ["Neiva"]}}
 
 
 def test_lo_que_pide_el_modelo_manda_sobre_la_pantalla(payload):
-    r = tools.ejecutar("efectividad", {"municipio": "Aipe", "mes": "2026-01"}, payload, VistaTablero(municipio="Neiva", meses=["2026-02"]))
+    r = tools.ejecutar("efectividad", {"municipio": "Aipe", "mes": "2026-01"}, payload, VistaTablero(municipios=["Neiva"], meses=["2026-02"]))
     assert (r["ordenes"], r["ef_pct"]) == (20, 100.0)
     assert "filtros_de_pantalla" not in r
 
 
 def test_sin_filtros_de_pantalla_da_el_total(payload):
-    r = tools.ejecutar("efectividad", {"sin_filtros_de_pantalla": True}, payload, VistaTablero(municipio="Neiva"))
+    r = tools.ejecutar("efectividad", {"sin_filtros_de_pantalla": True}, payload, VistaTablero(municipios=["Neiva"]))
     assert r["ordenes"] == 58
 
 
 def test_un_ranking_no_filtra_por_la_dimension_que_agrupa(payload):
     # Con «Neiva» en pantalla, ranking por municipio seguiría comparando los dos.
-    r = tools.ejecutar("ranking", {"dimension": "municipio", "min_ordenes": 1}, payload, VistaTablero(municipio="Neiva"))
+    r = tools.ejecutar("ranking", {"dimension": "municipio", "min_ordenes": 1}, payload, VistaTablero(municipios=["Neiva"]))
     assert len(r["filas"]) == 2
 
 
@@ -88,7 +88,7 @@ def test_el_servicio_descarta_la_bandera_si_el_usuario_no_la_pidio(payload, monk
     from app.services.openai_service import OpenAIService
 
     llamadas = {0: {"id": "c", "name": "efectividad", "args": json.dumps({"sin_filtros_de_pantalla": True})}}
-    vista = VistaTablero(municipio="Neiva")
+    vista = VistaTablero(municipios=["Neiva"])
     res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Cómo va 2026?"))
     assert json.loads(res[0]["content"])["ordenes"] == 18  # Neiva, no los 58 del total
     res = asyncio.run(OpenAIService._resultados(llamadas, vista, "¿Y en todo el departamento?"))
@@ -117,3 +117,18 @@ def test_un_ranking_por_tecnico_no_se_filtra_por_los_elegidos(payload):
     vista = VistaTablero(tecnicos=["0"])
     r = tools.ejecutar("ranking", {"dimension": "tecnico", "min_ordenes": 1}, payload, vista)
     assert [f["nombre"] for f in r["filas"]] == ["6044"]
+
+
+def test_varios_municipios_elegidos_se_suman(payload):
+    vista = VistaTablero(municipios=["Neiva", "Aipe"], zona=None)
+    assert vista.filtros() == {"municipio": ["Neiva", "Aipe"]}
+    assert vista.resumen() == "municipios: Neiva; Aipe"
+    r = tools.ejecutar("efectividad", {}, payload, vista)
+    assert r["ordenes"] == 58  # 18 de Neiva + 40 de Aipe
+    solo = tools.ejecutar("efectividad", {}, payload, VistaTablero(municipios=["Aipe"]))
+    assert solo["ordenes"] == 40
+
+
+def test_un_ranking_por_municipio_no_se_filtra_por_los_elegidos(payload):
+    r = tools.ejecutar("ranking", {"dimension": "municipio", "min_ordenes": 1}, payload, VistaTablero(municipios=["Neiva"]))
+    assert len(r["filas"]) == 2

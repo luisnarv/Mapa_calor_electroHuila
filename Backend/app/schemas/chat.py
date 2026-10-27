@@ -22,7 +22,7 @@ class VistaTablero(BaseModel):
     `metrics.DIMENSIONES`.
     """
 
-    municipio: str | None = None
+    municipios: list[str] = Field(default_factory=list, description="Municipios elegidos a la vez en el tablero.")
     zona: str | None = None
     ciclo: str | None = None
     tecnicos: list[str] = Field(default_factory=list, description="Técnicos elegidos a la vez en el tablero.")
@@ -39,12 +39,16 @@ class VistaTablero(BaseModel):
 
     def filtros(self) -> dict[str, str | list[str]]:
         """Solo los filtros de catálogo puestos, sin los meses. Los técnicos van con el nombre del filtro."""
-        puestos = {k: v for k, v in self.model_dump(exclude={"meses", "tecnicos"}).items() if v}
-        return {**puestos, "tecnico": self.tecnicos} if self.tecnicos else puestos
+        puestos = {k: v for k, v in self.model_dump(exclude={"meses", "tecnicos", "municipios"}).items() if v}
+        if self.municipios:
+            puestos["municipio"] = self.municipios
+        if self.tecnicos:
+            puestos["tecnico"] = self.tecnicos
+        return puestos
 
     def resumen(self) -> str:
         partes = [
-            f"{k.replace('_', ' ')}{'s' if k == 'tecnico' else ''}: {'; '.join(v) if isinstance(v, list) else v}"
+            f"{k.replace('_', ' ')}{'s' if isinstance(v, list) else ''}: {'; '.join(v) if isinstance(v, list) else v}"
             for k, v in self.filtros().items()
         ]
         if self.meses:

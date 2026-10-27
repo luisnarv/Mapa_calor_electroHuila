@@ -85,6 +85,11 @@ export default function Home() {
     d1: 60,
     minOrders: 10,
     hotspot: 60,
+    // Municipios elegidos en la cola de triaje (índices en dim.barrios). `selBarrio` es el mismo
+    // municipio cuando hay uno solo, y null con varios: así todo lo que ya miraba `selBarrio` sigue
+    // funcionando.
+    barrios: [],
+    vistaMulti: "acumulado",
     selBarrio: null,
     tecs: [],
     vistaMultiTec: "acumulado",
@@ -145,6 +150,7 @@ export default function Home() {
       tipoAct: "",
       d0: 0,
       d1: maxD,
+      barrios: [],
       selBarrio: null,
       tecs: [],
       selNic: null,
@@ -646,6 +652,14 @@ export default function Home() {
 
   const A = useMemo(() => agregar(IDX), [agregar, IDX]);
 
+  // Lo mismo, solo con las órdenes de los municipios elegidos: es el acumulado del detalle.
+  const Asel = useMemo(() => {
+    if (!st.barrios || st.barrios.length < 2 || !rawArrays) return null;
+    const sel = new Set(st.barrios);
+    const B = rawArrays.B;
+    return agregar(IDX.filter((i) => sel.has(B[i])));
+  }, [agregar, IDX, rawArrays, st.barrios]);
+
   // Lo mismo, solo con las órdenes de los técnicos elegidos: es el acumulado del detalle.
   const AselTec = useMemo(() => {
     if (!st.tecs || st.tecs.length < 2 || !rawArrays) return null;
@@ -1060,40 +1074,54 @@ export default function Home() {
       if (key === "zona") {
         next.muni = "";
         next.brig = "";
+        next.barrios = [];
         next.selBarrio = null;
       }
       if (key === "muni") {
         next.brig = "";
+        next.barrios = [];
         next.selBarrio = null;
       }
+      if (key === "selBarrio") {
+        next.barrios = value == null ? [] : [value];
+      }
       if (key === "minOrders") {
+        next.barrios = [];
         next.selBarrio = null;
       }
       return next;
     });
   };
 
+  // Deja la selección en `lista`. Con un solo municipio `selBarrio` lo repite, que es lo que lee
+  // todo lo que analiza un municipio; con varios queda null y el detalle pasa a acumulado.
+  const conBarrios = (prev, lista) => ({
+    ...prev,
+    barrios: lista,
+    selBarrio: lista.length === 1 ? lista[0] : null,
+    jerBarrio: lista.length === 1 ? lista[0] : null,
+    ...(lista.length ? { tab: "barrio", jerBrig: null } : {})
+  });
+
   const handleSelectBarrio = (b) => {
     setSt((prev) => {
-      // Segundo clic sobre el mismo municipio → quitar la selección y volver a
-      // mostrar todos los municipios y sus límites.
-      if (prev.selBarrio === b) {
-        return { ...prev, selBarrio: null, jerBarrio: null };
-      }
-      return {
-        ...prev,
-        selBarrio: b,
-        tab: "barrio",
-        // Sync hierarchy tab
-        jerBarrio: b,
-        jerBrig: null
-      };
+      // Segundo clic sobre el mismo municipio (si es el único elegido) → quitar la selección y
+      // volver a mostrar todos los municipios y sus límites.
+      if (prev.barrios.length === 1 && prev.barrios[0] === b) return conBarrios(prev, []);
+      return conBarrios(prev, [b]);
     });
   };
 
-  // Limpia solo el municipio remarcado (sin tocar el resto de filtros)
+  // La casilla de cada municipio en la cola de triaje: suma o quita ese municipio de la selección.
+  const handleToggleBarrio = (b) => {
+    setSt((prev) =>
+      conBarrios(prev, prev.barrios.includes(b) ? prev.barrios.filter((x) => x !== b) : [...prev.barrios, b])
+    );
+  };
+
+  // Limpia solo los municipios remarcados (sin tocar el resto de filtros)
   const handleClearBarrio = () => {
-    setSt((prev) => ({ ...prev, selBarrio: null, jerBarrio: null }));
+    setSt((prev) => conBarrios(prev, []));
   };
 
   const handleReset = () => {
@@ -1111,7 +1139,8 @@ export default function Home() {
       d1: MAXDAY,
       minOrders: 10,
       hotspot: 60,
-        selBarrio: null,
+      barrios: [],
+      selBarrio: null,
       tecs: [],
       // Vuelve al mes en curso (mantiene el arranque liviano; los históricos se
       // vuelven a descargar solo si se seleccionan).
@@ -1200,7 +1229,10 @@ export default function Home() {
   const nombreDe = (lista, i) => (i === "" || i == null ? null : lista?.[+i] ?? null);
   const dimV = data.dim;
   const vistaChat = {
-    municipio: st.selBarrio != null ? nombreDe(dimV.munis, dimV.b_muni?.[st.selBarrio]) : nombreDe(dimV.munis, st.muni),
+    // Los municipios elegidos en el mapa mandan sobre el filtro de la barra superior.
+    municipios: st.barrios?.length
+      ? st.barrios.map((b) => nombreDe(dimV.munis, dimV.b_muni?.[b])).filter(Boolean)
+      : [nombreDe(dimV.munis, st.muni)].filter(Boolean),
     zona: nombreDe(dimV.zonas, st.zona),
     ciclo: nombreDe(dimV.ciclos, st.ciclo),
     tecnicos: (st.tecs || []).map((i) => dimV.tecs[i]).filter(Boolean),
@@ -1238,6 +1270,7 @@ export default function Home() {
               handleSelectBarrio(b);
               handleFilterChange("activeTab", "detalle");
             }}
+            onToggleBarrio={handleToggleBarrio}
             V={V}
           />
         </aside>
@@ -1255,6 +1288,7 @@ export default function Home() {
             recommend={recommend}
             techRoute={techRoute}
             AselTec={AselTec}
+            Asel={Asel}
             zoneAvg={zoneAvg}
             actionsFor={actionsFor}
             onFilterChange={handleFilterChange}
@@ -1377,7 +1411,7 @@ export default function Home() {
                 V={V}
               />
 
-              {st.selBarrio != null && (
+              {st.barrios.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearBarrio}
@@ -1650,6 +1684,7 @@ export default function Home() {
           dim={data.dim}
           onFilterChange={handleFilterChange}
           onSelectBarrio={handleSelectBarrio}
+          onToggleBarrio={handleToggleBarrio}
           V={V}
         />
 
@@ -1667,7 +1702,7 @@ export default function Home() {
             V={V}
           />
 
-          {st.selBarrio != null && (
+          {st.barrios.length > 0 && (
             <button
               type="button"
               onClick={handleClearBarrio}
@@ -1922,6 +1957,7 @@ export default function Home() {
           recommend={recommend}
           techRoute={techRoute}
             AselTec={AselTec}
+            Asel={Asel}
           zoneAvg={zoneAvg}
           actionsFor={actionsFor}
           onFilterChange={handleFilterChange}

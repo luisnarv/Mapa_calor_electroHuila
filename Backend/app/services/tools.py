@@ -40,7 +40,13 @@ def _filtro(descripcion: str) -> dict[str, Any]:
 
 
 _FILTROS: dict[str, dict[str, Any]] = {
-    "municipio": _filtro("Municipio del Huila, p. ej. 'Neiva', 'Garzón'. Es la unidad del mapa."),
+    "municipio": {
+        "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+        "description": (
+            "Municipio del Huila, p. ej. 'Neiva', 'Garzón'. Es la unidad del mapa. Varios: pasa una "
+            "LISTA y las cifras salen sumadas de todos."
+        ),
+    },
     "zona": _filtro("Zona: Centro, Norte, Occidente o Sur."),
     "ciclo": _filtro("Ciclo de suspensión, por su número («3») o por parte del nombre. Ver `valores_de`."),
     "tecnico": {

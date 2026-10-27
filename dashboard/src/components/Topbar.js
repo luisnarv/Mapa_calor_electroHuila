@@ -133,7 +133,11 @@ export default function Topbar({
       .filter((o) => disponibles.has(o.valor));
 
   const barrioSel =
-    st.selBarrio != null ? (dim.barrios[st.selBarrio] || "").split(" | ").pop() : null;
+    st.barrios?.length > 1
+      ? `${st.barrios.length} municipios`
+      : st.selBarrio != null
+        ? (dim.barrios[st.selBarrio] || "").split(" | ").pop()
+        : null;
 
   const hayFiltros =
     st.zona !== "" || st.muni !== "" || st.brig !== "" || st.tipo !== "" ||
@@ -290,9 +294,9 @@ export default function Topbar({
                 type="button"
                 className="hd-pill on"
                 onClick={() => onFilterChange("selBarrio", null)}
-                aria-label={`Quitar el filtro de municipio ${barrioSel}`}
+                aria-label={`Quitar la selección de ${barrioSel}`}
               >
-                <span className="hd-pill-k">Municipio</span>
+                <span className="hd-pill-k">{st.barrios?.length > 1 ? "Municipios" : "Municipio"}</span>
                 <span className="hd-pill-v">: {barrioSel}</span>
                 <span className="hd-pill-ic" aria-hidden="true">
                   <X size={13} strokeWidth={2.4} />

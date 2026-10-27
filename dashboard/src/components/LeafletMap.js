@@ -501,13 +501,13 @@ export default function LeafletMap({
       }
     }
 
-    if ((st.layers.bpoly || st.selBarrio != null) && geo.bp) {
-      const sel = st.selBarrio;
+    if ((st.layers.bpoly || st.barrios?.length) && geo.bp) {
+      const sel = st.barrios?.length ? new Set(st.barrios) : null;
       for (const p of geo.bp) {
         // Con un municipio seleccionado, dibujar ÚNICAMENTE su límite (aunque la
         // capa de límites o la de marcadores por municipio estén desactivadas).
-        if (sel != null) {
-          if (p.b !== sel) continue;
+        if (sel) {
+          if (!sel.has(p.b)) continue;
         } else if (p.b >= 0) {
           // Filter by selected zone
           if (st.zona !== "" && dim.b_zona[p.b] !== +st.zona) continue;
@@ -534,7 +534,7 @@ export default function LeafletMap({
           }
         }
 
-        const isSel = sel != null && p.b === sel;
+        const isSel = sel != null && sel.has(p.b);
         const o = p.b >= 0 ? A.barrio.get(p.b) : null;
         const dudoso = p.b >= 0 && p.cf < 0.6;
         const col = o && !dudoso ? riskColor(o.risk) : P.none;
@@ -609,6 +609,7 @@ export default function LeafletMap({
       const sets = [[], []];
       const pts = [];
       const I = A.IDX || [];
+      const selBarrios = st.barrios?.length ? new Set(st.barrios) : null;
       // Con técnicos elegidos, sus puntos y nada más.
       const selTec = st.tecs?.length ? new Set(st.tecs) : null;
 
@@ -616,7 +617,7 @@ export default function LeafletMap({
         const i = I[j];
         const e = st.E_raw[i];
         if (!vis[e]) continue;
-        if (st.selBarrio !== null && st.B_raw[i] !== st.selBarrio) continue;
+        if (selBarrios && !selBarrios.has(st.B_raw[i])) continue;
         if (selTec && !selTec.has(st.T_raw[i])) continue;
         if (st.layers.heat) {
           const lt = st.lat(i);
@@ -638,8 +639,8 @@ export default function LeafletMap({
         // Rampas de calor de marca: efectivas (verde) · fallidas (lima)
         const grads = P.heat;
         const techo = [28, 14];
-        const heatRadius = st.selBarrio !== null ? 25 : 14;
-        const heatBlur = st.selBarrio !== null ? 15 : 20;
+        const heatRadius = selBarrios ? 25 : 14;
+        const heatBlur = selBarrios ? 15 : 20;
 
         for (const e of [0, 1]) {
           if (sets[e].length) {
@@ -669,10 +670,10 @@ export default function LeafletMap({
         // Si hay un municipio seleccionado desde la cola de triaje (o el mapa),
         // dibujamos SOLO ese municipio y lo remarcamos; si no hay selección,
         // se muestran todos como de costumbre.
-        const sel = st.selBarrio;
+        const sel = selBarrios;
 
         for (const [b, o] of A.barrio) {
-          if (sel != null && b !== sel) continue;
+          if (sel && !sel.has(b)) continue;
           // Con técnicos elegidos solo salen los municipios donde trabajaron. La burbuja conserva
           // las cifras de TODO el municipio: el agregado por municipio no se parte por técnico.
           if (selTec && ![...selTec].some((t) => o.tec.has(t))) continue;
@@ -682,7 +683,7 @@ export default function LeafletMap({
           const n = (vis[0] ? o.ef : 0) + (vis[1] ? o.fa : 0);
           if (!n) continue;
 
-          const isSel = sel != null && b === sel;
+          const isSel = sel != null && sel.has(b);
           const hot = o.risk != null && o.risk >= st.hotspot;
           const rad = Math.min(20, 7 + Math.sqrt(n) * 0.7);
           const col = riskColor(o.risk);
@@ -739,7 +740,7 @@ export default function LeafletMap({
     } else {
       if (map.hasLayer(ptLayerRef.current)) map.removeLayer(ptLayerRef.current);
     }
-  }, [A, st.layers, st.est, st.hotspot, st.selBarrio, st.tecs, st.ciclo, ciclosGeo, theme]);
+  }, [A, st.layers, st.est, st.hotspot, st.barrios, st.tecs, st.ciclo, ciclosGeo, theme]);
 
   // 2 bis. Órdenes POR EJECUTAR del archivo cargado en el chat.
   //
@@ -915,6 +916,14 @@ export default function LeafletMap({
       map.flyTo(c, 11, { duration: 0.6 });
     }
   }, [st.selBarrio]);
+
+  // Al elegir varios municipios el mapa los encuadra todos (uno solo se centra como el enfocado).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !st.barrios || st.barrios.length < 2) return;
+    const centros = st.barrios.map((b) => geo.bc[b]).filter(Boolean);
+    if (centros.length) map.fitBounds(centros, { padding: [60, 60], maxZoom: 11, duration: 0.6 });
+  }, [st.barrios, geo.bc]);
 
   // Con las órdenes del archivo dibujadas el mapa NO está vacío, aunque el
   // histórico esté todo apagado: el aviso contradecía lo que se veía en pantalla.
