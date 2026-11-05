@@ -1150,6 +1150,14 @@ export default function Home() {
 
     setSt((prev) => {
       let next = { ...prev };
+      // Misma cascada que el filtro Ubicación: otra zona suelta el municipio que hubiera, y pedir
+      // municipios sin zona suelta la zona anterior (si no, «Sur › Campoalegre» deja el mapa vacío).
+      // La causal depende de la ubicación, así que también se suelta; si el chat trae una, se pone abajo.
+      if (idxDe(d.zonas, accion.zona) !== null) {
+        next = { ...next, muni: "", brig: "", barrios: [], selBarrio: null, jerBarrio: null };
+      } else if (munis.length) {
+        next = { ...next, zona: "", muni: "", brig: "" };
+      }
       for (const [campo, lista, nombre] of [
         ["zona", d.zonas, accion.zona],
         ["brig", d.brigs, accion.causal],
