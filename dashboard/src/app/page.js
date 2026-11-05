@@ -431,8 +431,10 @@ export default function Home() {
   // que elegir un valor no borre los demás de su propia lista.
   const avail = useMemo(() => {
     const res = {
-      zona: new Set(),
-      muni: new Set(),
+      // zona y muni son Map valor -> órdenes: el filtro Ubicación muestra el conteo, y
+      // `.has` / `.size` siguen sirviendo a las píldoras.
+      zona: new Map(),
+      muni: new Map(),
       brig: new Set(),
       tipo: new Set(),
       act: new Set(),
@@ -480,8 +482,8 @@ export default function Home() {
       const tVal = TA[i];
       const tOk = ti < 0 || tVal === ti;
 
-      if (mOk && gOk && oOk && aOk && cOk && rOk && tOk) res.zona.add(zVal);
-      if (zOk && gOk && oOk && aOk && cOk && rOk && tOk) res.muni.add(mVal);
+      if (mOk && gOk && oOk && aOk && cOk && rOk && tOk) res.zona.set(zVal, (res.zona.get(zVal) || 0) + 1);
+      if (zOk && gOk && oOk && aOk && cOk && rOk && tOk) res.muni.set(mVal, (res.muni.get(mVal) || 0) + 1);
       if (zOk && mOk && oOk && aOk && cOk && rOk && tOk) res.brig.add(gVal);
       if (zOk && mOk && gOk && aOk && cOk && rOk && tOk) res.tipo.add(oVal);
       if (ACT && zOk && mOk && gOk && oOk && cOk && rOk && tOk) res.act.add(aVal);

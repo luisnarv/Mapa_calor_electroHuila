@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronDown, Moon, RefreshCw, Sun, X } from "lucide-reac
 
 import { useTheme } from "@/lib/theme";
 import FiltroPildora from "@/components/FiltroPildora";
+import FiltroUbicacion from "@/components/FiltroUbicacion";
 
 /**
  * Cuántos días tienen los datos que se están viendo.
@@ -174,20 +175,7 @@ export default function Topbar({
             franja propia, y separarlos partía el header en dos. Cada una lleva
             dentro su estado, así que tampoco hay fila de chips aparte. */}
         <div className="hd-filtros">
-          <FiltroPildora
-            etiqueta="Zona"
-            valor={st.zona}
-            opciones={opcionesDe(dim.zonas, avail.zona)}
-            onElegir={(v) => onFilterChange("zona", v)}
-            vacio={`Todas las zonas (${avail.zona.size})`}
-          />
-          <FiltroPildora
-            etiqueta="Municipio"
-            valor={st.muni}
-            opciones={opcionesDe(dim.munis, avail.muni)}
-            onElegir={(v) => onFilterChange("muni", v)}
-            vacio={`Todos los municipios (${avail.muni.size})`}
-          />
+          <FiltroUbicacion st={st} dim={dim} avail={avail} onFilterChange={onFilterChange} />
           <FiltroPildora
             etiqueta={et.brigs || "Causal"}
             valor={st.brig}
