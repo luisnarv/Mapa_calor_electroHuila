@@ -1164,8 +1164,7 @@ export default function Home() {
         ["tipo", d.tipos, accion.clase_servicio],
         ["act", d.acts, accion.actividad],
         ["ciclo", d.ciclos, accion.ciclo],
-        ["brigada", d.brigadas, accion.brigada],
-        ["tipoAct", d.tiposActividad, accion.tipo_actividad]
+        ["brigada", d.brigadas, accion.brigada]
       ]) {
         const i = idxDe(lista, nombre);
         if (i !== null) next[campo] = i;
@@ -1294,7 +1293,6 @@ export default function Home() {
     ciclo: nombreDe(dimV.ciclos, st.ciclo),
     tecnicos: (st.tecs || []).map((i) => dimV.tecs[i]).filter(Boolean),
     brigada: nombreDe(dimV.brigadas, st.brigada),
-    tipo_actividad: nombreDe(dimV.tiposActividad, st.tipoAct),
     causal: nombreDe(dimV.brigs, st.brig),
     clase_servicio: nombreDe(dimV.tipos, st.tipo),
     actividad: nombreDe(dimV.actividades, st.act),

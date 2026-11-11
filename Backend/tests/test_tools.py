@@ -141,7 +141,7 @@ def test_filtrar_mapa_arma_la_accion_con_nombres_del_catalogo(payload):
     r = tools.ejecutar("filtrar_mapa", {"municipio": ["neiva", "AIPE"], "zona": "norte", "mes": "2026-02"}, payload)
     assert r["accion"] == {
         "tipo": "filtrar_mapa", "municipios": ["Neiva", "Aipe"], "tecnicos": [], "meses": ["2026-02"],
-        "zona": "Norte", "ciclo": None, "brigada": None, "tipo_actividad": None,
+        "zona": "Norte", "ciclo": None, "brigada": None,
         "causal": None, "clase_servicio": None, "actividad": None,
     }
     assert r["aplicado"]["zona"] == "Norte"

@@ -148,7 +148,7 @@ export default function Topbar({
   // o técnicos elegidos, estados ocultos, y los ajustes de la cola de triaje (mínimo y umbral).
   const hayFiltros =
     st.zona !== "" || st.muni !== "" || st.brig !== "" || st.tipo !== "" ||
-    st.act !== "" || st.ciclo !== "" || st.brigada !== "" || st.tipoAct !== "" || mesesPuestos || barrioSel ||
+    st.act !== "" || st.ciclo !== "" || st.brigada !== "" || mesesPuestos || barrioSel ||
     tecsSel > 0 || !st.est.every(Boolean) || st.hotspot !== 60 || st.minOrders !== 10;
 
   const edad = edadDeLosDatos(st.generated);
@@ -213,15 +213,6 @@ export default function Topbar({
               opciones={opcionesDe(dim.acts, avail.act)}
               onElegir={(v) => onFilterChange("act", v)}
               vacio={`Todas las actividades (${avail.act.size})`}
-            />
-          )}
-          {dim.tiposActividad && dim.tiposActividad.length > 1 && (
-            <FiltroPildora
-              etiqueta="Tipo de actividad"
-              valor={st.tipoAct}
-              opciones={opcionesDe(dim.tiposActividad, avail.tipoAct)}
-              onElegir={(v) => onFilterChange("tipoAct", v)}
-              vacio={`Todos los tipos (${avail.tipoAct.size})`}
             />
           )}
 

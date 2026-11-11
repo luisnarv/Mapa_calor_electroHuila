@@ -77,7 +77,7 @@ _DIMENSION = {"type": "string", "enum": list(metrics.DIMENSIONES)}
 # Los filtros que tiene el mapa. El resto de dimensiones (causa, subacción, estrato) solo existen
 # para consultar: no hay dónde ponerlas en la pantalla.
 FILTROS_DEL_MAPA = (
-    "municipio", "zona", "ciclo", "tecnico", "brigada", "tipo_actividad", "causal", "clase_servicio", "actividad",
+    "municipio", "zona", "ciclo", "tecnico", "brigada", "causal", "clase_servicio", "actividad",
 )
 
 _DEFINICIONES = (
