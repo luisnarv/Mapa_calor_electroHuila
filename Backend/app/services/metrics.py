@@ -191,6 +191,15 @@ def nombres_filtros(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]
     return nombres
 
 
+# Las órdenes fallidas casi nunca llegan a tener un tipo de brigada: quedan en «CUALQUIERA». Por eso moto y
+# camioneta salen cerca del 100 % y comparar solo esas dos engaña. El modelo lo omitía aunque el prompt lo decía.
+AVISO_BRIGADA = (
+    "Las órdenes fallidas casi siempre quedan con brigada «CUALQUIERA» (no llegaron a tener una asignada), así que la "
+    "efectividad de moto y camioneta sale cerca del 100 % y comparar solo esas dos engaña. Consulta también CUALQUIERA "
+    "(`ranking` por brigada) y dilo al citar la comparación."
+)
+
+
 def _aviso_parcial(p: Payload, meses: Sequence[int]) -> str | None:
     """Aviso si el recorte incluye el mes en curso y los datos no llegan a su último día.
 
@@ -210,10 +219,13 @@ def _aviso_parcial(p: Payload, meses: Sequence[int]) -> str | None:
 
 def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str, meses: Sequence[int] = ()) -> dict[str, Any]:
     """El recorte exacto sobre el que se calculó, para que quien responda lo cite."""
-    base: dict[str, Any] = {"periodo": etiqueta, "filtros": nombres_filtros(p, filtros), "datos_hasta": p.fecha_max}
+    nombres = nombres_filtros(p, filtros)
+    base: dict[str, Any] = {"periodo": etiqueta, "filtros": nombres, "datos_hasta": p.fecha_max}
     aviso = _aviso_parcial(p, meses)
     if aviso:
         base["aviso"] = aviso
+    if "brigada" in nombres:
+        base["aviso_brigada"] = AVISO_BRIGADA
     return base
 
 
@@ -278,19 +290,26 @@ def ranking(
         "dimension": dimension,
         "ordenado_por": ordenar_por,
         "extremo": extremo,
+        **({"aviso_brigada": AVISO_BRIGADA} if dimension == "brigada" else {}),
         "filas": filas[:limite],
         "grupos_con_muestra": len(filas),
         "base": {**_base(p, filtros, etiqueta, meses), "min_ordenes": min_ordenes},
     }
 
 
-def serie_mensual(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]:
+def serie_mensual(p: Payload, filtros: Mapping[str, Filtro], min_ordenes: int = 30) -> dict[str, Any]:
     meses, etiqueta = resolver_meses(p, None)
     por_mes = agrupar(p, filtros, meses, por="mes")
-    return {
-        "serie": [{**_fila(p.meses[m], c), "mes": p.meses[m]} for m, c in sorted(por_mes.items()) if c.tot],
-        "base": _base(p, filtros, etiqueta, meses),
-    }
+    serie = [{**_fila(p.meses[m], c), "mes": p.meses[m]} for m, c in sorted(por_mes.items()) if c.tot]
+    out: dict[str, Any] = {"serie": serie}
+    # El mejor y el peor mes ya calculados: el modelo elegía mal el máximo de la lista (dio marzo de 2026 como
+    # el mejor cuando era enero de 2025). Solo cuentan meses con muestra mínima.
+    con_muestra = [f for f in serie if f["ordenes"] >= min_ordenes]
+    if con_muestra:
+        out["mejor_mes"] = max(con_muestra, key=lambda f: (f["ef_pct"], f["ordenes"]))
+        out["peor_mes"] = min(con_muestra, key=lambda f: (f["ef_pct"], -f["ordenes"]))
+    out["base"] = _base(p, filtros, etiqueta, meses)
+    return out
 
 
 def comparar_periodos(
@@ -369,8 +388,11 @@ def por_dia(
     ordenar_por: str = "ordenes",
     extremo: str = "mayor",
     limite: int = 10,
+    fecha: str | None = None,
 ) -> dict[str, Any]:
     """Los días con más (o menos) órdenes o fallidas de un recorte: «¿qué día se hicieron más órdenes?».
+
+    Con `fecha` («2026-09-14») devuelve solo ese día: la cifra de un día que no está entre los de arriba.
 
     Antes el chat respondía que «los datos solo están por mes», y es falso: cada orden trae su fecha.
     """
@@ -378,6 +400,12 @@ def por_dia(
         raise KeyError(ordenar_por)
     if extremo not in ("mayor", "menor"):
         raise KeyError(extremo)
+    if fecha:
+        try:
+            date.fromisoformat(fecha)
+        except ValueError as exc:
+            raise KeyError(f"fecha={fecha!r} (usa YYYY-MM-DD)") from exc
+        mes = mes or fecha[:7]
     meses, etiqueta = resolver_meses(p, mes)
     inicio = date.fromisoformat(p.fecha_min)
     filas = []
@@ -385,6 +413,11 @@ def por_dia(
         dia = inicio + timedelta(days=d)
         filas.append({**_fila(dia.isoformat(), c), "fecha": dia.isoformat(), "dia_semana": DIAS_SEMANA[dia.weekday()]})
     clave = {"ordenes": "ordenes", "fallidas": "fallidas", "efectivas": "efectivas"}[ordenar_por]
+    if fecha:
+        filas = [f for f in filas if f["fecha"] == fecha]
+        if not filas:
+            return {"fecha": fecha, "filas": [], "nota": "Ese día no tiene órdenes en el recorte (o está fuera de los datos).",
+                    "base": _base(p, filtros, etiqueta, meses)}
     filas.sort(key=lambda f: (f[clave], f["fecha"]), reverse=(extremo == "mayor"))
     return {
         "ordenado_por": ordenar_por,

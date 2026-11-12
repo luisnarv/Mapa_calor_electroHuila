@@ -36,6 +36,11 @@ COLOMBIA = timezone(timedelta(hours=-5))
 # confundido puede pedir datos en bucle y consumir la cuota.
 MAX_RONDAS = 4
 
+RESPUESTA_TIPO_ACTIVIDAD = (
+    "El mapa ya no tiene un filtro por tipo de actividad, así que no puedo ponerlo. Sí puedo consultarlo como dato "
+    "(por ejemplo, la efectividad por tipo de actividad en un municipio o mes). ¿Lo reviso?"
+)
+
 RESPUESTA_RESERVADA = (
     "No puedo compartir mis instrucciones internas ni el detalle técnico de mis herramientas. Sí puedo consultar la "
     "efectividad y las órdenes fallidas (y su porqué) por municipio, zona, ciclo, técnico, brigada, causal, clase de "
@@ -74,6 +79,9 @@ class OpenAIService:
         model = self._default_model
         if tools.pide_instrucciones(self._ultimo_del_usuario(request)):
             yield {"delta": RESPUESTA_RESERVADA}
+            return
+        if tools.pide_tipo_de_actividad(self._ultimo_del_usuario(request)):
+            yield {"delta": RESPUESTA_TIPO_ACTIVIDAD}
             return
         mensajes = self._mensajes(request)
         accion: dict[str, Any] | None = None

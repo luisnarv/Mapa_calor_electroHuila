@@ -280,3 +280,66 @@ def test_los_dias_con_mas_ordenes(payload):
     assert r["dias_con_datos"] == 1 and r["filas"][0]["ordenes"] == 58
     assert r["filas"][0]["fecha"] == "2026-01-01" and r["filas"][0]["dia_semana"] == "jueves"
     assert "error" in tools.ejecutar("por_dia", {"ordenar_por": "nada"}, payload)
+
+
+# --- tercera ronda -----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("frase", ["me gustaría ver Timaná", "ahora septiembre", "solo moto", "solo reconexiones", "quisiera ver Neiva"])
+def test_otras_formas_naturales_de_pedir_el_mapa(frase):
+    assert tools.pide_mover_mapa(frase), frase
+
+
+@pytest.mark.parametrize("frase", ["¿solo moto?", "¿Cuántas órdenes hay ahora?"])
+def test_estas_no_mueven_el_mapa(frase):
+    assert not tools.pide_mover_mapa(frase), frase
+
+
+def test_pedir_ayuda_de_uso_no_es_pedir_el_prompt():
+    assert not tools.pide_instrucciones("dame las instrucciones para filtrar por municipio")
+
+
+@pytest.mark.parametrize("frase, campo", [("muéstrame el ciclo 3 y el ciclo 99", "ciclo"), ("ver los ciclos 3 y 4", "ciclo"),
+                                          ("muéstrame la zona Norte y la zona Sur", "zona"), ("zona norte y sur", "zona")])
+def test_dos_ciclos_o_dos_zonas_se_detectan(frase, campo):
+    assert tools.pide_mas_de_uno(frase) == campo
+
+
+def test_dos_ciclos_no_mueven_el_mapa(payload):
+    r = tools.ejecutar("filtrar_mapa", {"ciclo": "3"}, payload, None, "muéstrame el ciclo 3 y el ciclo 4")
+    assert "un solo ciclo" in r["error"] and "accion" not in r
+
+
+def test_el_tipo_de_actividad_ya_no_se_puede_mover():
+    assert tools.pide_tipo_de_actividad("filtra por tipo de actividad suspensión en gabinete con moto")
+    assert tools.pide_tipo_de_actividad("muéstrame el tipo de actividad Suspensión / con moto")
+    assert not tools.pide_tipo_de_actividad("¿cuál es la efectividad por tipo de actividad?")
+
+
+def test_estrato_o_causa_pedidos_de_palabra_se_marcan_no_aplicados(payload):
+    r = tools.ejecutar("filtrar_mapa", {"municipio": "Aipe"}, payload, None, "muéstrame Aipe con el estrato 3")
+    assert "estrato" in r["no_aplicado"] and r["aplicado"] == {"municipio": "Aipe"}
+
+
+def test_el_error_de_combinacion_vacia_dice_que_existen_por_separado(payload):
+    r = tools.ejecutar("filtrar_mapa", {"municipio": "Aipe", "zona": "Centro"}, payload, None, "muéstrame Aipe en la zona Centro")
+    assert "existen por separado" in r["decir_asi"]
+
+
+def test_la_serie_mensual_trae_el_mejor_y_el_peor_mes(payload):
+    r = metrics.serie_mensual(payload, {}, min_ordenes=1)
+    assert r["mejor_mes"]["mes"] == "2026-01" and r["peor_mes"]["mes"] == "2026-02"
+    assert r["mejor_mes"]["ef_pct"] > r["peor_mes"]["ef_pct"]
+
+
+def test_comparar_brigadas_advierte_de_las_fallidas_sin_brigada(payload):
+    assert "CUALQUIERA" in metrics.efectividad(payload, {"brigada": "MOTO"})["base"]["aviso_brigada"]
+    assert "CUALQUIERA" in metrics.ranking(payload, "brigada", {}, min_ordenes=1)["aviso_brigada"]
+    assert "aviso_brigada" not in metrics.efectividad(payload, {})["base"]
+
+
+def test_un_dia_concreto(payload):
+    r = metrics.por_dia(payload, {}, fecha="2026-01-01")
+    assert r["filas"][0]["ordenes"] == 8 + 20  # enero: Neiva 8 + Aipe 20, todo en el minuto 0
+    assert metrics.por_dia(payload, {}, fecha="2026-01-02")["filas"] == []
+    assert "error" in tools.ejecutar("por_dia", {"fecha": "14 de septiembre"}, payload)

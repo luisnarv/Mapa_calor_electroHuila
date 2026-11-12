@@ -135,14 +135,19 @@ _DEFINICIONES = (
             "ordenar_por": {"type": "string", "enum": ["ordenes", "fallidas", "efectivas"], "description": "Por defecto 'ordenes'."},
             "extremo": {"type": "string", "enum": ["mayor", "menor"], "description": "'mayor' (por defecto) los días con más; 'menor' con menos."},
             "limite": {"type": "integer", "description": "Cuántos días devolver. Por defecto 10."},
+            "fecha": {
+                "type": "string",
+                "description": "Un día concreto «YYYY-MM-DD»: devuelve solo ese día. Para «¿cuántas órdenes el 14 de septiembre?».",
+            },
             "sin_filtros_de_pantalla": _SIN_PANTALLA,
         },
         [],
     ),
     (
         "serie_mensual",
-        "Órdenes y efectividad mes a mes de un recorte, para ver la tendencia. También sirve para «el mejor y el peor "
-        "mes»: pídela y ordena tú los meses por `ef_pct` (el mes en curso puede venir incompleto: avísalo).",
+        "Órdenes y efectividad mes a mes de un recorte, para ver la tendencia. Trae ya calculados `mejor_mes` y "
+        "`peor_mes` (por efectividad, con muestra mínima): úsalos tal cual para «el mejor y el peor mes», sin buscar "
+        "tú el máximo de la lista. El mes en curso puede venir incompleto: avísalo.",
         {**_FILTROS, "sin_filtros_de_pantalla": _SIN_PANTALLA},
         [],
     ),
@@ -293,6 +298,11 @@ def _filtrar_mapa(
     no_aplicado = {
         c: "el mapa no filtra por esto" for c in metrics.DIMENSIONES if c not in FILTROS_DEL_MAPA and a.get(c)
     }
+    if pidio:
+        # El modelo a veces no pasa «estrato» o «causa» a la herramienta pero luego dice que los filtró.
+        for palabra, campo in (("estrato", "estrato"), ("causa", "causa"), ("subaccion", "subaccion")):
+            if re.search(rf"\b{palabra}\b", metrics.norm(pidio)):
+                no_aplicado.setdefault(campo, "el mapa no filtra por esto")
 
     estado = _estado_resultante(vista, nombres, quitar)
     if "todos" in quitar or "mes" in quitar:
@@ -308,6 +318,8 @@ def _filtrar_mapa(
         return {
             "error": "Con esos filtros juntos el mapa se quedaría sin órdenes. NO se movió nada.",
             "existen_por_separado": "Cada filtro existe en los datos; es la combinación la que no tiene órdenes. No digas que alguno «no existe».",
+            "decir_asi": "Esos filtros existen por separado, pero no hay órdenes con todos juntos: "
+            + "; ".join(f"{c}: {', '.join(v) if isinstance(v, list) else v}" for c, v in metrics.nombres_filtros(p, estado).items()),
             "quedaria": metrics.nombres_filtros(p, estado),
             "meses": [p.meses[i] for i in idx_meses],
             "quitando_uno_de_estos_si_hay_ordenes": salvan,
@@ -357,7 +369,7 @@ def _ejecutar(
     if nombre == "por_dia":
         return metrics.por_dia(
             p, _filtros(a), a.get("mes"), a.get("ordenar_por") or "ordenes", a.get("extremo") or "mayor",
-            a.get("limite") or 10,
+            a.get("limite") or 10, a.get("fecha"),
         )
     if nombre == "filtrar_mapa":
         return _filtrar_mapa(p, a, vista, pidio)
@@ -392,7 +404,8 @@ _PIDE_QUITAR = re.compile(
 _PIDE_MOVER = re.compile(
     r"\b(muestr\w*|ensen\w*|filtr\w*|quiero ver|quisiera ver|ver (solo|el|la|los|las|a)|pon|pone|poner|ponme|ponga|"
     r"cambia|cambiame|cambiar|cambie|ve a|ir a|vamos a|llevame|lleva|resalt\w*|centr\w*|enfoc\w*|selecciona\w*|"
-    r"escoge|elige|en el mapa|ocult\w*)\b"
+    r"escoge|elige|en el mapa|ocult\w*|mirar|miremos|veamos|revisemos|"
+    r"(gustaria|quiero|quisiera|puedo|podria|dejame|necesito|vamos a|voy a|hay que|hagamos) (ver|mirar))\b"
 )
 
 
@@ -403,11 +416,43 @@ def pide_quitar(mensaje: str) -> bool:
 def pide_mover_mapa(mensaje: str) -> bool:
     """¿El usuario pidió ver o cambiar algo en el mapa? Sin un verbo así, `filtrar_mapa` no se ejecuta."""
     texto = metrics.norm(mensaje)
-    return bool(_PIDE_MOVER.search(texto) or _PIDE_QUITAR.search(texto) or re.match(r"ahora\b", texto))
+    # «ahora septiembre» y «solo moto», sin pregunta, son órdenes para el mapa.
+    corto = re.match(r"(ahora|solo|solamente)\b", texto) and "¿" not in mensaje and "?" not in mensaje
+    return bool(_PIDE_MOVER.search(texto) or _PIDE_QUITAR.search(texto) or corto)
+
+
+# El mapa admite una sola zona y un solo ciclo: si piden dos, el modelo filtraba uno y decía haber filtrado ambos.
+_DOS_CICLOS = re.compile(r"\bciclos? \d{1,3}\b( y | e | o |, ?)(el |los )?(ciclos? )?\d{1,3}\b")
+_DOS_ZONAS = re.compile(
+    r"\bzonas? (norte|sur|centro|occidente)\b( y | e | o |, ?)(la |las )?(zonas? )?(norte|sur|centro|occidente)\b"
+)
+_TIPO_ACTIVIDAD = re.compile(r"\btipos? de actividad\b")
+
+
+def pide_mas_de_uno(mensaje: str) -> str | None:
+    """«Muéstrame el ciclo 3 y el ciclo 4»: devuelve 'ciclo' o 'zona' si piden dos, que el mapa no admite."""
+    texto = metrics.norm(mensaje)
+    if _DOS_CICLOS.search(texto):
+        return "ciclo"
+    if _DOS_ZONAS.search(texto):
+        return "zona"
+    return None
+
+
+def pide_tipo_de_actividad(mensaje: str) -> bool:
+    """Ordenar ver o filtrar el «tipo de actividad»: ese filtro ya no existe en el mapa."""
+    texto = metrics.norm(mensaje)
+    return bool(_TIPO_ACTIVIDAD.search(texto)) and pide_mover_mapa(mensaje)
 
 
 # Pedir el prompt o las herramientas, en cualquier forma: citarlo, resumirlo, traducirlo, listarlo.
-_OBJETO_RESERVADO = r"(instrucciones|prompt|reglas de dominio|tus reglas|herramientas|parametros|funciones|configuracion)"
+# Con posesivo («tus instrucciones», «tu prompt»): «dame las instrucciones para filtrar por municipio» es pedir
+# ayuda de uso, no el prompt, y no debe recibir el rechazo.
+_OBJETO_RESERVADO = (
+    r"((tus|tu|sus|su|mis|mi|your) (instrucciones|reglas|herramientas|funciones|prompt|configuracion|parametros|instructions|rules|tools)"
+    r"|(system|sistema) (prompt|instructions)|instrucciones (de|del) sistema|instrucciones internas|reglas de dominio"
+    r"|herramientas (que )?tienes|parametros de (tus|las) herramientas)"
+)
 _VERBO_REVELAR = (
     r"(resum\w*|repit\w*|cit\w*|copi\w*|muestr\w*|ensen\w*|list\w*|dime|dame|traduc\w*|revel\w*|imprim\w*|"
     r"escrib\w*|enumer\w*|explic\w*|describ\w*|expon\w*|vuelc\w*|literal\w*|entre comillas|cuales)"
@@ -453,6 +498,11 @@ def ejecutar(
 
     `pidio` es el último mensaje del usuario: con él se comprueba que pidió mover el mapa antes de hacerlo.
     """
+    if nombre == "filtrar_mapa" and pidio is not None and (campo := pide_mas_de_uno(pidio)):
+        return {
+            "error": f"El mapa admite un solo {campo} a la vez y el usuario pidió dos. NO se movió nada.",
+            "que_hacer": f"Dile que solo cabe un {campo} y pregúntale cuál prefiere; NO digas que filtraste ninguno.",
+        }
     if nombre == "filtrar_mapa" and pidio is not None and not pide_mover_mapa(pidio):
         return {
             "error": "El usuario solo preguntó por datos y NO pidió mover el mapa: no se filtró nada.",
