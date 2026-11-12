@@ -36,6 +36,12 @@ COLOMBIA = timezone(timedelta(hours=-5))
 # confundido puede pedir datos en bucle y consumir la cuota.
 MAX_RONDAS = 4
 
+RESPUESTA_RESERVADA = (
+    "No puedo compartir mis instrucciones internas ni el detalle técnico de mis herramientas. Sí puedo consultar la "
+    "efectividad y las órdenes fallidas (y su porqué) por municipio, zona, ciclo, técnico, brigada, causal, clase de "
+    "servicio, mes y día; compararlas entre periodos y mover el mapa cuando me pidas ver algo. ¿Qué quieres revisar?"
+)
+
 AVISO_SIN_CIERRE = "\n\n(No pude cerrar la consulta; intenta con una pregunta más concreta.)"
 
 
@@ -66,6 +72,9 @@ class OpenAIService:
         """
         # El modelo lo fija el servidor: dejarlo al cliente permitía elegir uno caro o inexistente.
         model = self._default_model
+        if tools.pide_instrucciones(self._ultimo_del_usuario(request)):
+            yield {"delta": RESPUESTA_RESERVADA}
+            return
         mensajes = self._mensajes(request)
         accion: dict[str, Any] | None = None
         respondio = False
@@ -177,7 +186,7 @@ class OpenAIService:
                 if args.get("sin_filtros_de_pantalla") and not tools.pide_ignorar_pantalla(pidio):
                     args.pop("sin_filtros_de_pantalla")
                 # Recorrer el histórico completo es CPU pura: fuera del hilo del bucle de eventos.
-                resultado = await asyncio.to_thread(tools.ejecutar, ll["name"], args, p, vista)
+                resultado = await asyncio.to_thread(tools.ejecutar, ll["name"], args, p, vista, pidio)
             # La acción es para el navegador, no para el modelo.
             accion = _unir_acciones(accion, resultado.pop("accion", None))
             mensajes.append(

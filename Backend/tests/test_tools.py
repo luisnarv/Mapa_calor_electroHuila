@@ -5,7 +5,7 @@ from app.services import payload_store, tools
 
 def test_cada_herramienta_declara_sus_parametros():
     nombres = [t["function"]["name"] for t in tools.TOOLS]
-    assert nombres == ["efectividad", "ranking", "serie_mensual", "comparar_periodos", "filtrar_mapa", "valores_de", "resumen"]
+    assert nombres == ["efectividad", "ranking", "por_dia", "serie_mensual", "comparar_periodos", "filtrar_mapa", "valores_de", "resumen"]
     for t in tools.TOOLS:
         f = t["function"]
         assert set(f["parameters"]["required"]) <= set(f["parameters"]["properties"])

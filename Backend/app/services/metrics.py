@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import calendar
 import re
+from datetime import date, timedelta
 import statistics
 import unicodedata
 from dataclasses import dataclass
@@ -156,7 +157,10 @@ def agrupar(
     """Cuenta las órdenes del recorte, en un solo grupo (`None`) o una por valor de `por`."""
     checks = [(getattr(p, DIMENSIONES[c][1]), frozenset(v)) for c, v in _resolver_filtros(p, filtros).items()]
     # `por='mes'` agrupa por mes (índice en `p.meses`), que no es una dimensión de filtro.
-    col_por = (p.mes if por == "mes" else getattr(p, DIMENSIONES[por][1])) if por else None
+    if por == "dia":  # `p.m` son minutos desde `fecha_min`
+        col_por = [v // 1440 for v in p.m]
+    else:
+        col_por = (p.mes if por == "mes" else getattr(p, DIMENSIONES[por][1])) if por else None
     en_meses = set(meses)
     todos = len(en_meses) == len(p.meses)
     mes, e = p.mes, p.e
@@ -352,6 +356,42 @@ def valores_de(
         "ordenes_por_valor": {n: o for n, o in filas[:limite]},
         "filtros": nombres_filtros(p, pedidos),
         "nota": "Solo valores con órdenes bajo esos filtros, en todo el histórico.",
+    }
+
+
+DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+
+def por_dia(
+    p: Payload,
+    filtros: Mapping[str, Filtro],
+    mes: str | Sequence[str] | None = None,
+    ordenar_por: str = "ordenes",
+    extremo: str = "mayor",
+    limite: int = 10,
+) -> dict[str, Any]:
+    """Los días con más (o menos) órdenes o fallidas de un recorte: «¿qué día se hicieron más órdenes?».
+
+    Antes el chat respondía que «los datos solo están por mes», y es falso: cada orden trae su fecha.
+    """
+    if ordenar_por not in ("ordenes", "fallidas", "efectivas"):
+        raise KeyError(ordenar_por)
+    if extremo not in ("mayor", "menor"):
+        raise KeyError(extremo)
+    meses, etiqueta = resolver_meses(p, mes)
+    inicio = date.fromisoformat(p.fecha_min)
+    filas = []
+    for d, c in agrupar(p, filtros, meses, por="dia").items():
+        dia = inicio + timedelta(days=d)
+        filas.append({**_fila(dia.isoformat(), c), "fecha": dia.isoformat(), "dia_semana": DIAS_SEMANA[dia.weekday()]})
+    clave = {"ordenes": "ordenes", "fallidas": "fallidas", "efectivas": "efectivas"}[ordenar_por]
+    filas.sort(key=lambda f: (f[clave], f["fecha"]), reverse=(extremo == "mayor"))
+    return {
+        "ordenado_por": ordenar_por,
+        "extremo": extremo,
+        "dias_con_datos": len(filas),
+        "filas": filas[:limite],
+        "base": _base(p, filtros, etiqueta, meses),
     }
 
 
