@@ -242,6 +242,8 @@ class OpenAIService:
             )
         return (
             f"FILTROS ACTIVOS EN SU PANTALLA AHORA — {resumen}\n"
+            "(Cada filtro va separado por « | ». Un nombre puede llevar « · », p. ej. el ciclo «6 · CALLES 12 A 25C»: es UN solo "
+            "valor del filtro indicado antes de los dos puntos; pásalo completo y en ese mismo filtro.)\n"
             "Esta lista es la ÚNICA verdad de lo que ve: los filtros que se mencionaron en turnos anteriores y no "
             "aparecen aquí ya no valen, no los repitas en las herramientas salvo que los pida de nuevo.\n"
             "El servidor los aplica a cada consulta cuando tú no pasas otro lugar o periodo: no hace "

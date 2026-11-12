@@ -59,7 +59,9 @@ class VistaTablero(BaseModel):
         ]
         if self.meses:
             partes.append(f"meses: {', '.join(self.meses)}")
-        return " · ".join(partes)
+        # Separador « | » y no « · »: el nombre de un ciclo («6 · CALLES 12 A 25C») ya lleva « · » y el modelo lo
+        # partía en un ciclo «6» y un municipio «CALLES 12 A 25C».
+        return " | ".join(partes)
 
 
 class ChatRequest(BaseModel):

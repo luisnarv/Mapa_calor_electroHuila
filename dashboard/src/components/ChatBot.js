@@ -409,6 +409,9 @@ export default function ChatBot({ vista, onAccion, onToggle }) {
     async (text) => {
       const pregunta = text.trim();
       if (!pregunta || busy) return;
+      // El chip es de la última respuesta que movió el mapa: si esta no lo mueve (o el chat lo rechaza), el
+      // de la anterior se veía como si acabara de aplicarse.
+      setFiltroAplicado(null);
 
       const marca = Date.now();
       const historial = [...messages, { role: "user", content: pregunta, hora: marca }];

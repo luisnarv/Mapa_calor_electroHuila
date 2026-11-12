@@ -69,7 +69,7 @@ def test_la_pantalla_aparece_en_el_prompt_de_sistema():
     req = ChatRequest(messages=[Message(role="user", content="hola")], vista=VistaTablero(zona="Norte", meses=["2026-09"]))
     # La pantalla va al final de la conversación: es lo último que lee el modelo.
     pantalla = OpenAIService(None, "m", "PROMPT")._mensajes(req)[-1]["content"]
-    assert "FILTROS ACTIVOS EN SU PANTALLA AHORA — zona: Norte · meses: 2026-09" in pantalla
+    assert "FILTROS ACTIVOS EN SU PANTALLA AHORA — zona: Norte | meses: 2026-09" in pantalla
     req.vista = None
     sin = OpenAIService(None, "m", "PROMPT")._mensajes(req)[-1]["content"]
     assert "NO tiene filtros puestos" in sin and "todo el histórico" in sin
