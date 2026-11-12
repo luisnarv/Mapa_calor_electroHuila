@@ -79,6 +79,27 @@ function horaDe(marca) {
   return new Date(marca).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** «2026-09» → «sep 2026»: el chip no debe mostrar la clave interna. */
+const mesLegible = (ym) => {
+  const [anio, mes] = String(ym).split("-");
+  return MESES_CORTOS[+mes - 1] ? `${MESES_CORTOS[+mes - 1]} ${anio}` : ym;
+};
+
+const NOMBRE_QUITAR = {
+  todos: "todos los filtros",
+  municipio: "municipio",
+  zona: "zona",
+  ciclo: "ciclo",
+  tecnico: "técnico",
+  brigada: "brigada",
+  causal: "causal",
+  clase_servicio: "clase de servicio",
+  actividad: "actividad",
+  mes: "mes"
+};
+
 /** Convierte el filtro que el asistente puso en el mapa en una línea legible. Null si no filtra nada. */
 function resumirFiltro(a) {
   const lista = (v, varios) => (!v?.length ? null : v.length <= 2 ? v.join(", ") : `${v.length} ${varios}`);
@@ -88,11 +109,11 @@ function resumirFiltro(a) {
     a.zona,
     a.ciclo,
     a.brigada,
-    a.tipo_actividad,
     a.causal,
     a.clase_servicio,
     a.actividad,
-    a.meses?.join(", ")
+    a.meses?.length ? a.meses.map(mesLegible).join(", ") : null,
+    a.quitar?.length ? `sin ${a.quitar.map((c) => NOMBRE_QUITAR[c] || c).join(", ")}` : null
   ].filter(Boolean);
   return partes.length ? partes.join(" · ") : null;
 }

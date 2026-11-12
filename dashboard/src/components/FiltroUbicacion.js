@@ -37,7 +37,11 @@ export default function FiltroUbicacion({ st, dim, avail, onFilterChange }) {
 
   const puestoZona = st.zona !== "";
   const puestoMuni = st.muni !== "";
-  const puesto = puestoZona || puestoMuni;
+  // Los municipios que elige el mapa, la cola de triaje o el chat viven en `st.barrios`, no en
+  // `st.muni`: sin mirarlos, el control decía «Ubicación» a secas con el mapa recortado.
+  const eligidos = [...new Set((st.barrios || []).map((b) => dim.b_muni?.[b]).filter((m) => m != null))];
+  const puestoBarrios = eligidos.length > 0 && !puestoMuni;
+  const puesto = puestoZona || puestoMuni || puestoBarrios;
 
   const cerrar = React.useCallback((devolverFoco = true) => {
     setAbierto(false);
@@ -80,7 +84,11 @@ export default function FiltroUbicacion({ st, dim, avail, onFilterChange }) {
   const zonas = opciones(dim.zonas, avail.zona);
   const munis = opciones(dim.munis, avail.muni);
 
-  const ruta = [puestoZona ? dim.zonas[+st.zona] : null, puestoMuni ? dim.munis[+st.muni] : null].filter(Boolean);
+  const ruta = [
+    puestoZona ? dim.zonas[+st.zona] : null,
+    puestoMuni ? dim.munis[+st.muni] : null,
+    puestoBarrios ? (eligidos.length === 1 ? dim.munis[eligidos[0]] : `${eligidos.length} municipios`) : null
+  ].filter(Boolean);
 
   // Cada conteo de `avail` ya trae aplicado el otro nivel: el del más profundo es el de la selección.
   const ordenes = puestoMuni

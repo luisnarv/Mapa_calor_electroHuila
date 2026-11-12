@@ -1039,6 +1039,44 @@ export default function Home() {
   };
 
   // State update handler
+  // Tras cambiar la ubicación, suelta los filtros que ya no existen allí: un ciclo, una brigada, una
+  // causal, una clase o una actividad que solo tenía la zona anterior dejaban el mapa en 0 órdenes
+  // (y la píldora mostraba un índice crudo). Mira solo ubicación y meses, así que no toca lo que
+  // siga existiendo.
+  const soltarNoDisponibles = (next) => {
+    if (!data || !rawArrays) return next;
+    const dependientes = [
+      ["ciclo", "CI"],
+      ["brigada", "BR"],
+      ["brig", "G"],
+      ["tipo", "O"],
+      ["act", "ACT"]
+    ].filter(([campo, col]) => next[campo] !== "" && rawArrays[col]);
+    if (!dependientes.length) return next;
+    const { B, DAY } = rawArrays;
+    const zi = next.zona === "" ? -1 : +next.zona;
+    const mi = next.muni === "" ? -1 : +next.muni;
+    const barrios = next.barrios && next.barrios.length ? new Set(next.barrios) : null;
+    const meses =
+      next.months && next.months.length
+        ? new Set(next.months.map((k) => monthMap.keyToIdx.get(k)).filter((v) => v !== undefined))
+        : null;
+    const vistos = dependientes.map(() => new Set());
+    for (let i = 0; i < DAY.length; i++) {
+      if (meses && !meses.has(monthMap.idx[i])) continue;
+      const b = B[i];
+      if (zi >= 0 && data.dim.b_zona[b] !== zi) continue;
+      if (mi >= 0 && data.dim.b_muni[b] !== mi) continue;
+      if (barrios && !barrios.has(b)) continue;
+      for (let j = 0; j < dependientes.length; j++) vistos[j].add(rawArrays[dependientes[j][1]][i]);
+    }
+    const out = { ...next };
+    dependientes.forEach(([campo], j) => {
+      if (!vistos[j].has(+next[campo])) out[campo] = "";
+    });
+    return out;
+  };
+
   const handleFilterChange = (key, value) => {
     // Capas flota sobre el mapa y el panel inferior se come casi todo su alto: al abrir
     // uno de esos menús se pliega (se puede volver a abrir) y vuelve al regresar al mapa.
@@ -1091,7 +1129,7 @@ export default function Home() {
         next.barrios = [];
         next.selBarrio = null;
       }
-      return next;
+      return key === "zona" || key === "muni" ? soltarNoDisponibles(next) : next;
     });
   };
 
@@ -1148,8 +1186,25 @@ export default function Home() {
       .map((ym) => availableMonths.find((m) => m.ym === ym)?.key)
       .filter(Boolean);
 
+    const quitar = accion.quitar || [];
+
     setSt((prev) => {
       let next = { ...prev };
+      // «Quita la zona», «todo el departamento», «limpia el mapa»: lo que se suelta se suelta antes de
+      // aplicar lo que venga en la misma acción. Quitar la zona o el municipio suelta también lo que
+      // depende de la ubicación, igual que los controles.
+      if (quitar.includes("todos")) next = estadoLimpio(next);
+      for (const c of quitar) {
+        if (c === "zona") next = conBarrios({ ...next, zona: "", muni: "", brig: "" }, []);
+        else if (c === "municipio") next = conBarrios({ ...next, muni: "", brig: "" }, []);
+        else if (c === "ciclo") next.ciclo = "";
+        else if (c === "brigada") next.brigada = "";
+        else if (c === "causal") next.brig = "";
+        else if (c === "clase_servicio") next.tipo = "";
+        else if (c === "actividad") next.act = "";
+        else if (c === "tecnico") next.tecs = [];
+        else if (c === "mes") next.months = mesesPorDefecto();
+      }
       // Misma cascada que el filtro Ubicación: otra zona suelta el municipio que hubiera, y pedir
       // municipios sin zona suelta la zona anterior (si no, «Sur › Campoalegre» deja el mapa vacío).
       // La causal depende de la ubicación, así que también se suelta; si el chat trae una, se pone abajo.
@@ -1170,16 +1225,31 @@ export default function Home() {
         if (i !== null) next[campo] = i;
       }
       if (sinFila !== null) next.muni = String(sinFila);
-      if (barrios.length) next = conBarrios(next, barrios);
+      if (barrios.length) {
+        // Con una zona puesta solo caben los municipios de esa zona: el servidor ya rechaza el cruce
+        // vacío, pero un municipio fuera de su zona dejaba «Sur › Neiva» con el mapa en blanco.
+        const zi = next.zona === "" ? -1 : +next.zona;
+        const caben = zi < 0 ? barrios : barrios.filter((b) => d.b_zona[b] === zi);
+        next = conBarrios(next, caben.length ? caben : barrios);
+        if (zi >= 0 && !caben.length) next.zona = "";
+      }
       if (tecs.length) next.tecs = tecs;
       if (meses.length) next.months = meses;
       next.activeTab = barrios.length || tecs.length ? "detalle" : "mapa";
-      return next;
+      // Lo que ya no existe en la ubicación nueva (un ciclo de otra zona) se suelta: el mapa no queda en 0.
+      return soltarNoDisponibles(next);
     });
   };
 
-  const handleReset = () => {
-    setSt((prev) => ({
+  // Vuelve al mes en curso (mantiene el arranque liviano; los históricos se vuelven a descargar
+  // solo si se seleccionan).
+  const mesesPorDefecto = () => {
+    const recent = availableMonths.find((m) => m.recent);
+    return recent ? [recent.key] : availableMonths.map((m) => m.key);
+  };
+
+  // El estado de «Limpiar»: lo usa el botón y también el chat cuando le piden «limpia el mapa».
+  const estadoLimpio = (prev) => ({
       ...prev,
       zona: "",
       muni: "",
@@ -1198,14 +1268,12 @@ export default function Home() {
       barrios: [],
       selBarrio: null,
       tecs: [],
-      // Vuelve al mes en curso (mantiene el arranque liviano; los históricos se
-      // vuelven a descargar solo si se seleccionan).
-      months: (() => {
-        const recent = availableMonths.find((m) => m.recent);
-        return recent ? [recent.key] : availableMonths.map((m) => m.key);
-      })(),
+      months: mesesPorDefecto(),
       activeTab: "mapa"
-    }));
+  });
+
+  const handleReset = () => {
+    setSt((prev) => estadoLimpio(prev));
   };
 
   // Botón "Actualizar información": borra la caché local, vacía de memoria todos
@@ -1297,7 +1365,9 @@ export default function Home() {
     clase_servicio: nombreDe(dimV.tipos, st.tipo),
     actividad: nombreDe(dimV.actividades, st.act),
     // El tablero guarda los meses por su etiqueta («Octubre de 2026»); el backend espera «2026-10».
-    meses: (st.months || []).map((etiqueta) => availableMonths.find((m) => m.key === etiqueta)?.ym).filter(Boolean)
+    meses: (st.months || []).map((etiqueta) => availableMonths.find((m) => m.key === etiqueta)?.ym).filter(Boolean),
+    // Lo que apagó en «Capas»: el mapa solo dibuja lo demás, y el chat cuenta ambas clases.
+    ocultas: [st.est[1] ? null : "fallidas", st.est[0] ? null : "efectivas"].filter(Boolean)
   };
 
   const handleSelectNic = (nic) => {
