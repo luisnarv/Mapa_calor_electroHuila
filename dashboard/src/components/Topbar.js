@@ -6,6 +6,7 @@ import { AlertTriangle, ChevronDown, Moon, RefreshCw, Sun, X } from "lucide-reac
 import { useTheme } from "@/lib/theme";
 import FiltroPildora from "@/components/FiltroPildora";
 import FiltroUbicacion from "@/components/FiltroUbicacion";
+import FiltroMeses from "@/components/FiltroMeses";
 
 /**
  * Cuántos días tienen los datos que se están viendo.
@@ -60,60 +61,8 @@ export default function Topbar({
   const { theme, toggle } = useTheme();
   const et = dim.etiquetas || {};
 
-  const [monthsOpen, setMonthsOpen] = React.useState(false);
-  const mesesRef = React.useRef(null);
-
-  const monthName = (key) => key.split(" de ")[0];
   const activeMonths = st.months || [];
-  const totalMonths = availableMonths.length;
-  const activeOrdered = availableMonths.filter((m) => activeMonths.includes(m.key));
-  const activeCount = activeOrdered.length;
-  const allActive = totalMonths > 0 && activeCount === totalMonths;
-
-  let monthSummary;
-  if (allActive || activeCount === 0) {
-    monthSummary = "Todos los meses";
-  } else if (activeCount <= 2) {
-    monthSummary = activeOrdered.map((m) => monthName(m.key)).join(" · ");
-  } else {
-    monthSummary = `${monthName(activeOrdered[0].key)} – ${monthName(activeOrdered[activeCount - 1].key)}`;
-  }
-
-  const toggleMonth = (key) => {
-    const isActive = activeMonths.includes(key);
-    if (isActive) {
-      if (activeCount <= 1) return; // nunca dejar cero meses
-      onFilterChange("months", activeMonths.filter((x) => x !== key));
-    } else {
-      onFilterChange("months", [...activeMonths, key]);
-    }
-  };
-
-  const shortcutLabel = allActive ? "Solo el último" : "Todos";
-  const applyShortcut = () => {
-    if (allActive) {
-      const last = availableMonths[totalMonths - 1];
-      if (last) onFilterChange("months", [last.key]);
-    } else {
-      onFilterChange("months", availableMonths.map((m) => m.key));
-    }
-  };
-
-  // El desplegable de meses es multi-selección, así que conserva su propia lista
-  // de casillas; solo el disparador se viste de píldora como los demás.
-  React.useEffect(() => {
-    if (!monthsOpen) return;
-    const fuera = (e) => {
-      if (!mesesRef.current?.contains(e.target)) setMonthsOpen(false);
-    };
-    const esc = (e) => e.key === "Escape" && setMonthsOpen(false);
-    document.addEventListener("mousedown", fuera, true);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", fuera, true);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [monthsOpen]);
+  const activeCount = availableMonths.filter((m) => activeMonths.includes(m.key)).length;
 
   // Los meses solo cuentan como filtro puesto si no son los de arranque: el
   // tablero abre con el mes en curso y marcarlo cada sesión sería ruido.
@@ -216,61 +165,13 @@ export default function Topbar({
             />
           )}
 
-          <div className="hd-f" ref={mesesRef}>
-            <button
-              type="button"
-              className={`hd-pill ${mesesPuestos ? "on" : ""}`}
-              aria-haspopup="dialog"
-              aria-expanded={monthsOpen}
-              onClick={() => setMonthsOpen((v) => !v)}
-            >
-              <span className="hd-pill-k">Meses</span>
-              <span className="hd-pill-v">: {monthSummary}</span>
-              <span className="hd-pill-n">{activeCount}/{totalMonths}</span>
-              <span className="hd-pill-ic" aria-hidden="true">
-                <ChevronDown size={13} strokeWidth={2.4} />
-              </span>
-            </button>
-
-            {monthsOpen && (
-              <div className="mm-pop">
-                <div className="mm-head">
-                  <span className="mm-title">Selecciona meses</span>
-                  <button type="button" className="mm-all" onClick={applyShortcut}>
-                    {shortcutLabel}
-                  </button>
-                </div>
-
-                <div className="mm-grid">
-                  {availableMonths.map((m) => {
-                    const on = activeMonths.includes(m.key);
-                    const isLoading = loadingMonths.includes(m.key);
-                    return (
-                      <label
-                        key={m.key}
-                        className={`mm-item ${on ? "on" : ""}`}
-                        title={m.recent ? "Mes en curso" : isLoading ? "Descargando…" : undefined}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={() => toggleMonth(m.key)}
-                        />
-                        <span className="mm-name">{monthName(m.key)}</span>
-                        {isLoading ? (
-                          <span className="mm-spin" aria-label="Descargando" />
-                        ) : (
-                          <span className="mm-n">
-                            {(m.n || 0).toLocaleString("es-CO")}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+          <FiltroMeses
+            availableMonths={availableMonths}
+            activeMonths={activeMonths}
+            loadingMonths={loadingMonths}
+            onFilterChange={onFilterChange}
+            puesta={mesesPuestos}
+          />
 
           {/* El municipio elegido en el mapa o en la cola de triaje se muestra aquí para
               poder soltarlo. */}

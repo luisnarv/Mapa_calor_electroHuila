@@ -249,6 +249,10 @@ h2,h3,h4{font-family:var(--ff);font-weight:700;letter-spacing:.01em;color:var(--
 .ub-limpiar{background:none;border:0;padding:0;color:var(--cu2);font:600 11px var(--ff);
   cursor:pointer}
 .ub-limpiar:hover{text-decoration:underline}
+/* Filtro Meses (Anio > Mes): filas con casilla y una columna de meses con hasta 12 filas. */
+.mm-fila input[type=checkbox]{width:13px;height:13px;flex:0 0 auto;margin:0;accent-color:var(--cu);cursor:pointer}
+.ub-cols.mm-cols{height:min(372px,calc(100vh - 190px))}
+.mm-acciones{display:flex;align-items:center;gap:14px}
 /* `flex:0 0 auto` no es opcional: en una columna flex con altura máxima los
    hijos se encogen por debajo de su contenido y las opciones se solapan unas
    sobre otras en cuanto la lista es larga (22 municipios). */
