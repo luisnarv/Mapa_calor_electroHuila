@@ -154,18 +154,14 @@ h2,h3,h4{font-family:var(--ff);font-weight:700;letter-spacing:.01em;color:var(--
   border-left:3px solid var(--top-accent)}
 
 /* Fila única: identidad · filtros · utilidades, toda sobre la banda de marca. */
-/* Una sola fila que NO envuelve: antes, al poner un filtro aparecian mas pildoras y "Limpiar", y lo que
-   ya no cabia ("Hace N dias" y los iconos) caia a otra fila y empujaba el mapa hacia abajo. Ahora las
-   pildoras se encogen con puntos suspensivos y el alto del encabezado no cambia. Por debajo de 1100px
-   vuelve a envolver (ver el bloque responsivo). */
-.hd-id{display:flex;flex-wrap:nowrap;align-items:center;gap:10px 12px;
+.hd-id{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;
   padding:9px 14px;background:var(--banner)}
 .hd-badge{width:30px;height:30px;flex:0 0 30px;border-radius:var(--r-sm);
   background:var(--hd-badge-bg);color:var(--hd-badge-tx);display:flex;
   align-items:center;justify-content:center;font:500 12px var(--ff);
   letter-spacing:.06em}
 
-.hd-title{min-width:0;flex:0 0 auto;display:flex;flex-direction:column}
+.hd-title{min-width:0;display:flex;flex-direction:column}
 .hd-title b{font:500 14px var(--ff);color:var(--hd-id-tx);line-height:1.2}
 .hd-title span{font-size:12px;color:var(--hd-id-sub);line-height:1.3}
 /* El contexto del conjunto de datos empuja las utilidades a la derecha. */
@@ -173,9 +169,8 @@ h2,h3,h4{font-family:var(--ff);font-weight:700;letter-spacing:.01em;color:var(--
    las cifras se leían como una tercera línea del título. */
 .hd-ctx{font-size:11px;color:var(--hd-id-sub);font-family:var(--ff-num);
   font-variant-numeric:tabular-nums;white-space:nowrap;
-  padding-left:12px;border-left:1px solid var(--banner-line);
-  flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.hd-fresh{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;flex:0 0 auto;
+  padding-left:12px;border-left:1px solid var(--banner-line)}
+.hd-fresh{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;
   border-radius:999px;white-space:nowrap;color:var(--hd-fresh-tx);background:var(--hd-fresh-bg)}
 .hd-fresh.warn{background:var(--hd-warn-bg);color:var(--hd-warn-tx)}
 .hd-ico{width:30px;height:30px;flex:0 0 30px;padding:0;display:flex;
@@ -190,20 +185,17 @@ h2,h3,h4{font-family:var(--ff);font-weight:700;letter-spacing:.01em;color:var(--
 /* 3 · filtros como píldoras. La píldora ES el estado: sin poner muestra su
    nombre, puesta muestra el valor y se limpia desde ella misma. */
 /* Se van a la derecha, contra las utilidades, y envuelven si no caben. */
-.hd-filtros{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-end;
-  gap:6px;margin-left:auto;min-width:0;flex:1 1 auto}
-/* Cada filtro puede encogerse (hasta 60px) mostrando puntos suspensivos en vez de empujar al resto. */
-.hd-f{position:relative;flex:0 1 auto;min-width:84px}
-/* Las que ya tienen un valor puesto (chips) ceden primero: los nombres de los filtros vacios siguen legibles. */
-.hd-f:has(.hd-pill-v){flex-shrink:6;min-width:64px}
+.hd-filtros{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;
+  gap:6px;margin-left:auto;min-width:0}
+.hd-f{position:relative}
 .hd-pill{display:inline-flex;align-items:center;gap:6px;font:400 13px var(--ff);
   padding:5px 10px;border-radius:999px;border:1px solid var(--hd-pill-line);
   background:var(--hd-pill-bg);color:var(--hd-pill-tx);cursor:pointer;
-  max-width:min(280px,100%);min-width:0;white-space:nowrap}
+  max-width:280px}
 .hd-pill:hover{border-color:var(--hd-on-line)}
 .hd-pill.on{background:var(--hd-on-bg);border-color:var(--hd-on-line);
   color:var(--hd-on-tx)}
-.hd-pill-k{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.hd-pill-k{flex:0 0 auto}
 .hd-pill-v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hd-pill-n{font-family:var(--ff-num);font-variant-numeric:tabular-nums;
   font-size:11px;opacity:.75;flex:0 0 auto}
@@ -211,7 +203,7 @@ h2,h3,h4{font-family:var(--ff);font-weight:700;letter-spacing:.01em;color:var(--
 /* Zona muerta sobre la X: abrir la lista y limpiar no pueden pelearse el clic. */
 .hd-pill-x{position:absolute;top:0;right:0;width:26px;height:100%;padding:0;
   background:transparent;border:0;cursor:pointer}
-.hd-clear{background:transparent;border:0;color:var(--hd-id-sub);flex:0 0 auto;white-space:nowrap;
+.hd-clear{background:transparent;border:0;color:var(--hd-id-sub);
   font:400 13px var(--ff);padding:5px 6px;cursor:pointer;text-decoration:underline}
 .hd-clear:hover{color:var(--hd-id-tx)}
 
@@ -657,12 +649,6 @@ td.go>svg{display:block;margin-left:auto}
 
 @media(max-width:1500px){
   .hd-ctx{display:none}
-}
-
-@media(max-width:1100px){
-  .hd-id{flex-wrap:wrap}
-  .hd-filtros{flex-wrap:wrap;flex:1 1 100%;justify-content:flex-start;margin-left:0}
-  .hd-f{min-width:0}
 }
 
 @media(max-width:1280px){
