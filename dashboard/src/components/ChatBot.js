@@ -113,7 +113,11 @@ function resumirFiltro(a) {
     a.clase_servicio,
     a.actividad,
     a.meses?.length ? a.meses.map(mesLegible).join(", ") : null,
-    a.quitar?.length ? `sin ${a.quitar.map((c) => NOMBRE_QUITAR[c] || c).join(", ")}` : null
+    a.quitar?.length
+      ? a.quitar.includes("todos")
+        ? "filtros quitados"
+        : `sin ${a.quitar.map((c) => NOMBRE_QUITAR[c] || c).join(", ")}`
+      : null
   ].filter(Boolean);
   return partes.length ? partes.join(" · ") : null;
 }

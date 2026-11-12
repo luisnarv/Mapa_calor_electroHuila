@@ -343,3 +343,42 @@ def test_un_dia_concreto(payload):
     assert r["filas"][0]["ordenes"] == 8 + 20  # enero: Neiva 8 + Aipe 20, todo en el minuto 0
     assert metrics.por_dia(payload, {}, fecha="2026-01-02")["filas"] == []
     assert "error" in tools.ejecutar("por_dia", {"fecha": "14 de septiembre"}, payload)
+
+
+# --- quitar filtros sin pasar por el modelo ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "frase, esperado",
+    [("quita el filtro de zona", ["zona"]), ("Quita el filtro de municipio", ["municipio"]), ("quita la zona y el ciclo", ["zona", "ciclo"]),
+     ("limpia el mapa", ["todos"]), ("quita todos los filtros", ["todos"]), ("deja de ... ", None),
+     ("quita el filtro de zona por favor", ["zona"]), ("elimina el filtro de clase de servicio", ["clase_servicio"])],
+)
+def test_quitar_directo(frase, esperado):
+    assert tools.quitar_directo(frase) == esperado
+
+
+@pytest.mark.parametrize("frase", ["¿puedes quitar la zona?", "quita el filtro de zona y muéstrame Neiva", "quita la efectividad", "muéstrame Neiva"])
+def test_quitar_directo_solo_cuando_es_unicamente_eso(frase):
+    assert tools.quitar_directo(frase) is None
+
+
+def test_quitar_directo_no_llama_al_modelo_y_manda_la_accion():
+    import asyncio
+    from types import SimpleNamespace
+
+    llamadas = []
+
+    async def create(**kw):
+        llamadas.append(kw)
+        raise AssertionError("no debía llamar al modelo")
+
+    cliente = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    req = ChatRequest(messages=[Message(role="user", content="quita el filtro de zona")], vista=VistaTablero(zona="Sur"))
+
+    async def correr():
+        return [e async for e in OpenAIService(cliente, "m", "P").stream_chat(req)]
+
+    eventos = asyncio.run(correr())
+    assert "quité el filtro de zona" in eventos[0]["delta"]
+    assert eventos[-1]["accion"]["quitar"] == ["zona"] and not llamadas

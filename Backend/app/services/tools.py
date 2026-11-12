@@ -439,6 +439,42 @@ def pide_mas_de_uno(mensaje: str) -> str | None:
     return None
 
 
+# «Quita el filtro de zona» es una orden de una sola cosa: no hace falta el modelo, que a veces la rechazaba con
+# «el mapa solo admite una zona a la vez» (4 de 7 veces en el navegador). Se resuelve aquí, siempre igual.
+_QUITAR_DIRECTO = re.compile(
+    r"^(por favor )?((me )?(puedes|podrias) )?(quita|quitar|quitame|elimina|eliminar|borra|borrar|suelta|soltar|limpia|limpiar)\w* "
+    r"(el |los |la |las )?(filtro |filtros )?(de |del |de la |de los |de las )?(?P<campos>.+?)( por favor)?$"
+)
+_CAMPO_QUITAR = {
+    "zona": "zona", "zonas": "zona", "municipio": "municipio", "municipios": "municipio", "ciclo": "ciclo",
+    "ciclos": "ciclo", "brigada": "brigada", "tipo de brigada": "brigada", "causal": "causal",
+    "causal de suspension": "causal", "clase de servicio": "clase_servicio", "clase": "clase_servicio",
+    "actividad": "actividad", "tecnico": "tecnico", "tecnicos": "tecnico", "funcionario": "tecnico",
+    "funcionarios": "tecnico", "mes": "mes", "meses": "mes", "periodo": "mes", "ubicacion": "zona",
+    "todos": "todos", "todos los filtros": "todos", "todo": "todos", "filtros": "todos", "los filtros": "todos",
+    "mapa": "todos", "el mapa": "todos", "filtros del mapa": "todos", "los filtros del mapa": "todos",
+}
+
+
+def quitar_directo(mensaje: str) -> list[str] | None:
+    """Los filtros que pide soltar si el mensaje es SOLO eso («quita el filtro de zona», «limpia el mapa»).
+
+    Devuelve None si el mensaje pide algo más o no se entiende: entonces decide el modelo.
+    """
+    if "?" in mensaje or "¿" in mensaje:
+        return None
+    m = _QUITAR_DIRECTO.match(metrics.norm(mensaje))
+    if not m:
+        return None
+    campos = []
+    for trozo in re.split(r"\s*(?:,| y | e )\s*", m.group("campos").strip()):
+        campo = _CAMPO_QUITAR.get(re.sub(r"^(el|la|los|las|de|del) ", "", trozo.strip()))
+        if campo is None:
+            return None
+        campos.append(campo)
+    return list(dict.fromkeys(campos)) if campos else None
+
+
 def pide_tipo_de_actividad(mensaje: str) -> bool:
     """Ordenar ver o filtrar el «tipo de actividad»: ese filtro ya no existe en el mapa."""
     texto = metrics.norm(mensaje)

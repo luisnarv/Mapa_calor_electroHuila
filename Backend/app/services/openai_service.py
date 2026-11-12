@@ -80,6 +80,18 @@ class OpenAIService:
         if tools.pide_instrucciones(self._ultimo_del_usuario(request)):
             yield {"delta": RESPUESTA_RESERVADA}
             return
+        quitar = tools.quitar_directo(self._ultimo_del_usuario(request))
+        if quitar:
+            nombres = {"clase_servicio": "clase de servicio", "tecnico": "técnico", "todos": "todos los filtros", "mes": "mes"}
+            dicho = ", ".join(nombres.get(c, c) for c in quitar)
+            yield {"delta": f"Listo: quité {'el filtro de ' if quitar != ['todos'] else ''}{dicho}."}
+            yield {
+                "accion": {
+                    "tipo": "filtrar_mapa", "municipios": [], "tecnicos": [], "meses": [], "quitar": quitar,
+                    "zona": None, "ciclo": None, "brigada": None, "causal": None, "clase_servicio": None, "actividad": None,
+                }
+            }
+            return
         if tools.pide_tipo_de_actividad(self._ultimo_del_usuario(request)):
             yield {"delta": RESPUESTA_TIPO_ACTIVIDAD}
             return

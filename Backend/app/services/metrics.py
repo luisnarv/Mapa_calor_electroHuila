@@ -200,6 +200,14 @@ AVISO_BRIGADA = (
 )
 
 
+# Preguntas de asignación («¿a qué municipio mando más brigadas?») se contestaban con el volumen y un «se enviaron».
+NOTA_VOLUMEN = (
+    "Ordenar por volumen NO decide dónde mandar brigadas ni qué priorizar. Si la pregunta es de asignación o prioridad, "
+    "responde con las fallidas (impacto), el % de fallidas y la efectividad (haz otro `ranking` con ordenar_por='fallidas'), "
+    "empieza con «Mi criterio:» y di que es un criterio y no un dato. No escribas «se enviaron»."
+)
+
+
 def _aviso_parcial(p: Payload, meses: Sequence[int]) -> str | None:
     """Aviso si el recorte incluye el mes en curso y los datos no llegan a su último día.
 
@@ -291,6 +299,7 @@ def ranking(
         "ordenado_por": ordenar_por,
         "extremo": extremo,
         **({"aviso_brigada": AVISO_BRIGADA} if dimension == "brigada" else {}),
+        **({"nota_uso": NOTA_VOLUMEN} if ordenar_por == "volumen" else {}),
         "filas": filas[:limite],
         "grupos_con_muestra": len(filas),
         "base": {**_base(p, filtros, etiqueta, meses), "min_ordenes": min_ordenes},
