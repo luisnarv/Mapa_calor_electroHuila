@@ -64,7 +64,8 @@ class OpenAIService:
         El ciclo de herramientas no sale a la red. La acción va después del texto: el tablero se mueve
         al cerrar la respuesta, no a media redacción, y un turno lo mueve una sola vez (gana la última).
         """
-        model = request.model or self._default_model
+        # El modelo lo fija el servidor: dejarlo al cliente permitía elegir uno caro o inexistente.
+        model = self._default_model
         mensajes = self._mensajes(request)
         accion: dict[str, Any] | None = None
         respondio = False
@@ -84,7 +85,7 @@ class OpenAIService:
                 mensajes.append(self._mensaje_asistente(texto, llamadas))
                 resultados, nueva = await self._resultados(llamadas, request.vista, self._ultimo_del_usuario(request))
                 mensajes.extend(resultados)
-                accion = nueva or accion
+                accion = _unir_acciones(accion, nueva)
                 logger.info("Ronda %s: %s herramienta(s) ejecutada(s).", ronda + 1, len(llamadas))
 
             # Agotadas las rondas se pide una última respuesta SIN herramientas: cortar con
@@ -178,7 +179,7 @@ class OpenAIService:
                 # Recorrer el histórico completo es CPU pura: fuera del hilo del bucle de eventos.
                 resultado = await asyncio.to_thread(tools.ejecutar, ll["name"], args, p, vista)
             # La acción es para el navegador, no para el modelo.
-            accion = resultado.pop("accion", None) or accion
+            accion = _unir_acciones(accion, resultado.pop("accion", None))
             mensajes.append(
                 {"role": "tool", "tool_call_id": ll["id"], "content": json.dumps(resultado, ensure_ascii=False)}
             )
@@ -191,32 +192,56 @@ class OpenAIService:
     def _mensajes(self, request: ChatRequest) -> list[dict]:
         """Antepone el prompt de sistema. El cliente no puede sobrescribirlo."""
         turnos = [m.model_dump() for m in request.messages if m.role != "system"]
-        bloques = (self._system_prompt, self._fecha(), self._vista(request.vista))
-        return [{"role": "system", "content": "\n\n".join(bloques)}, *turnos]
+        p = payload_store.obtener(settings.DATA_DIR, settings.DOCS_UC_CAMPO, settings.DOCS_NI_CON_OBSERVACION)
+        inicio = "\n\n".join((self._system_prompt, self._fecha(p.fecha_max)))
+        # La pantalla va DESPUÉS de la conversación: es lo último que lee el modelo. Al principio lo
+        # ganaba el historial y, tras «Limpiar», seguía respondiendo con los técnicos de dos turnos atrás.
+        return [{"role": "system", "content": inicio}, *turnos, {"role": "system", "content": self._vista(request.vista)}]
 
     @staticmethod
-    def _fecha() -> str:
+    def _fecha(fecha_max: str = "") -> str:
         """El modelo no tiene reloj: sin esto rellena el año con el de su entrenamiento."""
         hoy = datetime.now(COLOMBIA).date()
-        return (
+        texto = (
             f"Hoy es {hoy.isoformat()}. Si el usuario nombra un mes sin año, se refiere al del año "
             f"en curso ({hoy.year}); tradúcelo a YYYY-MM antes de llamar a una herramienta."
         )
+        if fecha_max:
+            texto += (
+                f"\nLOS DATOS LLEGAN HASTA EL {fecha_max} (último dato cargado). Esa es la fecha de corte, no «hoy»: "
+                f"si el mes de {fecha_max[:7]} no terminó en esa fecha, está INCOMPLETO. Cuando te pregunten hasta "
+                "cuándo llegan los datos o si un mes está completo, responde con esta fecha."
+            )
+        return texto
 
     @staticmethod
     def _vista(vista: VistaTablero | None) -> str:
         """Los filtros que el usuario tiene puestos, para que chat y mapa hablen del mismo recorte."""
         resumen = vista.resumen() if vista else ""
+        ocultas = (
+            "\nEn su mapa tiene OCULTAS las órdenes " + " y ".join(vista.ocultas) + f": ve solo las demás; tus cifras "
+            "incluyen ambas clases, y si pregunta por lo que ve en el mapa, aclara esa diferencia."
+            if vista and vista.ocultas
+            else ""
+        )
         if not resumen:
-            return "El usuario no tiene filtros puestos: está viendo todo el histórico."
+            return (
+                "PANTALLA ACTUAL: el usuario NO tiene filtros puestos; está viendo todo el histórico. Aunque en la "
+                "conversación se hablara antes de un municipio, técnico, ciclo o mes, YA NO están en su pantalla "
+                "(los quitó o los cambió): no los repitas en las herramientas salvo que los pida de nuevo."
+                + ocultas
+            )
         return (
-            f"FILTROS ACTIVOS EN SU PANTALLA — {resumen}\n"
+            f"FILTROS ACTIVOS EN SU PANTALLA AHORA — {resumen}\n"
+            "Esta lista es la ÚNICA verdad de lo que ve: los filtros que se mencionaron en turnos anteriores y no "
+            "aparecen aquí ya no valen, no los repitas en las herramientas salvo que los pida de nuevo.\n"
             "El servidor los aplica a cada consulta cuando tú no pasas otro lugar o periodo: no hace "
             "falta repetirlos, y el resultado trae `filtros_de_pantalla` con lo que aplicó. Si pide "
             "expresamente otro lugar o periodo, pásalo solo ese: los demás filtros siguen aplicándose. "
             "Usa `sin_filtros_de_pantalla: true` únicamente si dice «todo el departamento» o que ignores sus filtros; "
             "nombrar un año o un mes no es motivo. «Este municipio» o «aquí» se refiere a los de arriba.\n"
             "Al dar una cifra di siempre sobre qué recorte la calculaste."
+            + ocultas
         )
 
     @staticmethod
@@ -238,6 +263,22 @@ class OpenAIService:
             return OpenAIServiceError(f"No hay datos cargados: {exc}", 503)
         logger.exception("Error inesperado llamando a OpenAI")
         return OpenAIServiceError("Error inesperado al consultar el modelo.", 502)
+
+
+def _unir_acciones(previa: dict[str, Any] | None, nueva: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Junta las acciones de mapa de un mismo turno: lo que pide la última pisa, pero no borra lo anterior.
+
+    «Muéstrame Neiva y la zona Sur» llegaba a veces como dos llamadas y se quedaba solo la última.
+    """
+    if not nueva:
+        return previa
+    if not previa:
+        return nueva
+    unida = dict(previa)
+    for campo, valor in nueva.items():
+        if valor not in (None, [], ""):
+            unida[campo] = valor
+    return unida
 
 
 @lru_cache

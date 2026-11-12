@@ -34,7 +34,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except OpenAIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return ChatResponse(
-        content="".join(partes), model=request.model or servicio.modelo_por_defecto, acciones=acciones
+        content="".join(partes), model=servicio.modelo_por_defecto, acciones=acciones
     )
 
 

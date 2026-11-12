@@ -10,7 +10,9 @@ un segundo camino de cálculo que pueda discrepar del mapa.
 
 from __future__ import annotations
 
+import calendar
 import re
+import statistics
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
@@ -153,7 +155,8 @@ def agrupar(
 ) -> dict[int | None, Conteo]:
     """Cuenta las órdenes del recorte, en un solo grupo (`None`) o una por valor de `por`."""
     checks = [(getattr(p, DIMENSIONES[c][1]), frozenset(v)) for c, v in _resolver_filtros(p, filtros).items()]
-    col_por = getattr(p, DIMENSIONES[por][1]) if por else None
+    # `por='mes'` agrupa por mes (índice en `p.meses`), que no es una dimensión de filtro.
+    col_por = (p.mes if por == "mes" else getattr(p, DIMENSIONES[por][1])) if por else None
     en_meses = set(meses)
     todos = len(en_meses) == len(p.meses)
     mes, e = p.mes, p.e
@@ -184,15 +187,36 @@ def nombres_filtros(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]
     return nombres
 
 
-def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str) -> dict[str, Any]:
+def _aviso_parcial(p: Payload, meses: Sequence[int]) -> str | None:
+    """Aviso si el recorte incluye el mes en curso y los datos no llegan a su último día.
+
+    Sin esto el modelo daba por completo un mes que termina en la fecha de corte, y comparaba su
+    volumen con el de meses enteros como si el volumen hubiera caído.
+    """
+    if not p.fecha_max or not p.meses or (len(p.meses) - 1) not in meses:
+        return None
+    anio, mes, dia = (int(x) for x in p.fecha_max.split("-"))
+    if p.meses[-1] != f"{anio:04d}-{mes:02d}" or dia >= calendar.monthrange(anio, mes)[1]:
+        return None
+    return (
+        f"{p.meses[-1]} está INCOMPLETO: los datos llegan solo hasta el {p.fecha_max}. "
+        "No compares su volumen de órdenes con meses completos, y dilo al citarlo."
+    )
+
+
+def _base(p: Payload, filtros: Mapping[str, Filtro], etiqueta: str, meses: Sequence[int] = ()) -> dict[str, Any]:
     """El recorte exacto sobre el que se calculó, para que quien responda lo cite."""
-    return {"periodo": etiqueta, "filtros": nombres_filtros(p, filtros)}
+    base: dict[str, Any] = {"periodo": etiqueta, "filtros": nombres_filtros(p, filtros), "datos_hasta": p.fecha_max}
+    aviso = _aviso_parcial(p, meses)
+    if aviso:
+        base["aviso"] = aviso
+    return base
 
 
 def efectividad(p: Payload, filtros: Mapping[str, Filtro], mes: str | Sequence[str] | None = None) -> dict[str, Any]:
     meses, etiqueta = resolver_meses(p, mes)
     c = agrupar(p, filtros, meses).get(None, Conteo())
-    return {**_fila("total", c), "base": _base(p, filtros, etiqueta)}
+    return {**_fila("total", c), "base": _base(p, filtros, etiqueta, meses)}
 
 
 # Sin «perdidas» ni ajustada: en ElectroHuila no existen.
@@ -205,7 +229,7 @@ def ranking(
     filtros: Mapping[str, Filtro],
     mes: str | Sequence[str] | None = None,
     ordenar_por: str = "ef_pond",
-    peores: bool = False,
+    extremo: str = "mayor",
     min_ordenes: int = 10,
     limite: int = 10,
 ) -> dict[str, Any]:
@@ -213,6 +237,8 @@ def ranking(
         raise KeyError(dimension)
     if ordenar_por not in CRITERIOS:
         raise KeyError(ordenar_por)
+    if extremo not in ("mayor", "menor"):
+        raise KeyError(extremo)
     meses, etiqueta = resolver_meses(p, mes)
     grupos = agrupar(p, filtros, meses, por=dimension)
     total_fa = sum(g.fa for g in grupos.values())
@@ -239,27 +265,27 @@ def ranking(
         "ef_pct": "ef_pct", "ef_pond": "puntaje_orden", "fallidas": "fallidas",
         "pct_fallidas": "pct_fallidas", "volumen": "ordenes", "efectivas": "efectivas",
     }[ordenar_por]
-    # `peores` invierte el extremo: quien tiene menos efectividad, menos fallidas, menos volumen.
-    mayor_primero = not peores
-    filas.sort(key=lambda f: (f[clave], f["ordenes"]), reverse=mayor_primero)
+    # `extremo` dice qué valores van primero del criterio elegido, sin interpretar «peor»: con
+    # `peores` según el criterio (menos efectividad, pero MÁS fallidas) el modelo lo usaba al revés
+    # y «los ciclos más problemáticos» salían con 0 fallidas.
+    filas.sort(key=lambda f: (f[clave], f["ordenes"]), reverse=(extremo == "mayor"))
 
     return {
         "dimension": dimension,
         "ordenado_por": ordenar_por,
+        "extremo": extremo,
         "filas": filas[:limite],
         "grupos_con_muestra": len(filas),
-        "base": {**_base(p, filtros, etiqueta), "min_ordenes": min_ordenes},
+        "base": {**_base(p, filtros, etiqueta, meses), "min_ordenes": min_ordenes},
     }
 
 
 def serie_mensual(p: Payload, filtros: Mapping[str, Filtro]) -> dict[str, Any]:
     meses, etiqueta = resolver_meses(p, None)
-    por_mes = {m: Conteo() for m in meses}
-    for m in meses:
-        por_mes[m] = agrupar(p, filtros, [m]).get(None, Conteo())
+    por_mes = agrupar(p, filtros, meses, por="mes")
     return {
-        "serie": [{**_fila(p.meses[m], c), "mes": p.meses[m]} for m, c in por_mes.items() if c.tot],
-        "base": _base(p, filtros, etiqueta),
+        "serie": [{**_fila(p.meses[m], c), "mes": p.meses[m]} for m, c in sorted(por_mes.items()) if c.tot],
+        "base": _base(p, filtros, etiqueta, meses),
     }
 
 
@@ -292,15 +318,69 @@ def comparar_periodos(
     filas.sort(key=lambda f: f["cambio_pp"])  # primero lo que más empeoró
     return {
         "periodo_a": et_a, "periodo_b": et_b, "filas": filas[:limite],
-        "base": {**_base(p, filtros, f"{et_a} vs {et_b}"), "min_ordenes": min_ordenes},
+        "base": {**_base(p, filtros, f"{et_a} vs {et_b}", [*idx_a, *idx_b]), "min_ordenes": min_ordenes},
     }
 
 
-def valores_de(p: Payload, dimension: str, texto: str | None = None, limite: int = 60) -> dict[str, Any]:
-    """Los nombres que existen en un catálogo, para que se pueda filtrar con uno exacto."""
+def valores_de(
+    p: Payload, dimension: str, texto: str | None = None, limite: int = 60, filtros: Mapping[str, Filtro] | None = None
+) -> dict[str, Any]:
+    """Los nombres que existen en un catálogo, para que se pueda filtrar con uno exacto.
+
+    Con `filtros` solo salen los que tienen órdenes bajo ellos: los municipios de una zona, la zona
+    de un municipio, los ciclos de Neiva. Sin esto el modelo respondía de memoria dónde queda cada
+    municipio, y se equivocaba.
+    """
     if dimension not in DIMENSIONES:
         raise KeyError(dimension)
     catalogo = getattr(p, DIMENSIONES[dimension][0])
     buscado = norm(texto) if texto else ""
-    valores = [c for c in catalogo if not buscado or buscado in norm(c)]
-    return {"dimension": dimension, "total": len(valores), "valores": valores[:limite]}
+    pedidos = {c: v for c, v in (filtros or {}).items() if c != dimension and v not in (None, "", [], ())}
+    if not pedidos:
+        valores = [c for c in catalogo if not buscado or buscado in norm(c)]
+        return {"dimension": dimension, "total": len(valores), "valores": valores[:limite]}
+    meses, _ = resolver_meses(p, None)
+    grupos = agrupar(p, pedidos, meses, por=dimension)
+    filas = sorted(
+        ((catalogo[i], c.tot) for i, c in grupos.items() if not buscado or buscado in norm(catalogo[i])),
+        key=lambda f: -f[1],
+    )
+    return {
+        "dimension": dimension,
+        "total": len(filas),
+        "valores": [n for n, _ in filas[:limite]],
+        "ordenes_por_valor": {n: o for n, o in filas[:limite]},
+        "filtros": nombres_filtros(p, pedidos),
+        "nota": "Solo valores con órdenes bajo esos filtros, en todo el histórico.",
+    }
+
+
+def resumen(p: Payload, filtros: Mapping[str, Filtro], mes: str | Sequence[str] | None = None) -> dict[str, Any]:
+    """Cuentas que el modelo hacía de cabeza y erraba: promedios por mes y por técnico, y cuántos hay.
+
+    Un técnico es una persona: los códigos «0» o «SIN DATO» no cuentan. El promedio por técnico es
+    sobre los que tuvieron órdenes en el recorte, no sobre los 125 del catálogo histórico.
+    """
+    meses, etiqueta = resolver_meses(p, mes)
+    total = agrupar(p, filtros, meses).get(None, Conteo())
+    por_mes = {m: c for m, c in agrupar(p, filtros, meses, por="mes").items() if c.tot}
+    cargas = sorted(c.tot for t, c in agrupar(p, filtros, meses, por="tecnico").items() if not p.tec_invalido[t])
+    n_meses = len(por_mes)
+    out: dict[str, Any] = {
+        **_fila("total", total),
+        "meses_con_datos": n_meses,
+        "promedio_ordenes_por_mes": round(total.tot / n_meses, 1) if n_meses else 0.0,
+        "promedio_fallidas_por_mes": round(total.fa / n_meses, 1) if n_meses else 0.0,
+        "tecnicos_con_ordenes": len(cargas),
+        "municipios_con_ordenes": len(agrupar(p, filtros, meses, por="municipio")),
+        "ciclos_con_ordenes": len(agrupar(p, filtros, meses, por="ciclo")),
+    }
+    if cargas:
+        out["ordenes_por_tecnico"] = {
+            "promedio": round(sum(cargas) / len(cargas), 1),
+            "mediana": statistics.median(cargas),
+            "maximo": cargas[-1],
+            "minimo": cargas[0],
+        }
+    out["base"] = _base(p, filtros, etiqueta, meses)
+    return out

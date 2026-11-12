@@ -9,7 +9,7 @@ def test_efectividad_total_y_por_municipio(payload):
     assert total["ef_pct"] == 70.7
     neiva = metrics.efectividad(payload, {"municipio": "neiva"}, "2026-02")
     assert (neiva["ordenes"], neiva["ef_pct"]) == (10, 50.0)
-    assert neiva["base"] == {"periodo": "2026-02", "filtros": {"municipio": "Neiva"}}
+    assert neiva["base"] == {"periodo": "2026-02", "filtros": {"municipio": "Neiva"}, "datos_hasta": "2026-02-28"}
 
 
 def test_un_anio_vale_por_todos_sus_meses(payload):
@@ -52,10 +52,10 @@ def test_el_ranking_no_presenta_el_puntaje_como_efectividad(payload):
     assert fila["ef_pct"] == 75.0 and "ef_pond" not in fila
 
 
-def test_ranking_respeta_minimo_y_peores(payload):
+def test_ranking_respeta_minimo_y_extremo(payload):
     r = metrics.ranking(payload, "municipio", {}, min_ordenes=30)
     assert [f["nombre"] for f in r["filas"]] == ["Aipe"]
-    peores = metrics.ranking(payload, "municipio", {}, peores=True, min_ordenes=1)
+    peores = metrics.ranking(payload, "municipio", {}, extremo="menor", min_ordenes=1)
     assert peores["filas"][0]["nombre"] == "Neiva"
 
 

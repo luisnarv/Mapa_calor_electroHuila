@@ -94,7 +94,10 @@ _DEFINICIONES = (
         "Ordena los valores de una dimensión (municipio, técnico, ciclo, causa...) por efectividad, "
         "fallidas o volumen. Para «el mejor/peor municipio» usa ordenar_por='ef_pond', que pondera por "
         "volumen: ordenar por 'ef_pct' a secas llena el tope de grupos diminutos con 100 %. "
-        "La efectividad de cada fila es `ef_pct`; `puntaje_orden` solo sirve para ordenar y no se cita.",
+        "La efectividad de cada fila es `ef_pct`; `puntaje_orden` solo sirve para ordenar y no se cita. "
+        "Las filas vienen ya en el orden que debes respetar. Receta: «los peores / más problemáticos» = "
+        "ordenar_por='ef_pond' con extremo='menor' (menos efectividad) o ordenar_por='fallidas' con "
+        "extremo='mayor' (más fallidas); «los mejores» = ef_pond con extremo='mayor'.",
         {
             "dimension": {**_DIMENSION, "description": "Qué se compara."},
             **_FILTROS,
@@ -107,7 +110,14 @@ _DEFINICIONES = (
                     "(número y proporción); 'volumen' para dónde hay más órdenes."
                 ),
             },
-            "peores": {"type": "boolean", "description": "true para el extremo contrario (menor efectividad, menos fallidas...)."},
+            "extremo": {
+                "type": "string",
+                "enum": ["mayor", "menor"],
+                "description": (
+                    "Qué valores del criterio van primero: 'mayor' (por defecto) los más altos, 'menor' los más "
+                    "bajos. Es literal sobre `ordenar_por`: con 'fallidas', 'mayor' trae los que MÁS fallan."
+                ),
+            },
             "min_ordenes": {"type": "integer", "description": "Mínimo de órdenes para entrar. Por defecto 10."},
             "limite": {"type": "integer", "description": "Cuántas filas devolver. Por defecto 10."},
             "sin_filtros_de_pantalla": _SIN_PANTALLA,
@@ -137,24 +147,46 @@ _DEFINICIONES = (
     ),
     (
         "filtrar_mapa",
-        "Pone filtros en el MAPA del usuario para que lo vea (la pantalla se mueve al terminar tu respuesta). "
-        "Úsala SOLO cuando pida ver, mostrar, filtrar o ir a algo («muéstrame Neiva», «filtra el ciclo 3»); "
-        "para una pregunta de datos no la uses. Solo cambia los filtros que pases: los demás se quedan como estaban.",
+        "Pone o quita filtros en el MAPA del usuario para que lo vea (la pantalla se mueve al terminar tu respuesta). "
+        "Úsala cuando pida ver, mostrar, enseñar, filtrar, poner, cambiar o ir a algo («muéstrame Neiva», «filtra el "
+        "ciclo 3») aunque también le des cifras; para una pregunta de datos pura no la uses. Pasa TODO lo que pidió en "
+        "UNA sola llamada. Solo cambia lo que pases: los demás filtros se quedan. El mapa tiene una sola zona, un solo "
+        "ciclo, una sola brigada, causal, clase de servicio y actividad a la vez (municipios y técnicos pueden ser "
+        "varios). NO filtra por estrato, causa ni subacción, ni mueve estados fallidas/efectivas, umbral de riesgo, "
+        "rango de días, capas o pestañas: di que no puedes, no lo finjas. Para soltar filtros usa `quitar` («quita la "
+        "zona», «todo el departamento», «limpia el mapa» = ['todos']). Si el resultado trae `error`, NO se movió nada: "
+        "cuéntale por qué y qué alternativa hay.",
         {
             **{c: _FILTROS[c] for c in FILTROS_DEL_MAPA},
             "mes": _MES,
+            "quitar": {
+                "type": "array",
+                "items": {"type": "string", "enum": [*FILTROS_DEL_MAPA, "mes", "todos"]},
+                "description": "Filtros que se sueltan. 'todos' = como el botón Limpiar. Quitar la zona suelta también el municipio.",
+            },
         },
         [],
     ),
     (
         "valores_de",
         "Lista los nombres que existen en una dimensión (ciclos, causas, causales...) para filtrar con uno exacto "
-        "cuando el usuario no lo dice igual.",
+        "cuando el usuario no lo dice igual. Con filtros solo trae los que tienen órdenes bajo ellos: "
+        "«¿qué municipios tiene la zona Sur?» = dimension='municipio' + zona='Sur'; «¿en qué zona queda Neiva?» = "
+        "dimension='zona' + municipio='Neiva'. NUNCA respondas de memoria a qué zona pertenece un municipio.",
         {
             "dimension": {**_DIMENSION, "description": "Qué catálogo consultar."},
             "texto": {"type": "string", "description": "Opcional: solo los que contengan este texto."},
+            **_FILTROS,
         },
         ["dimension"],
+    ),
+    (
+        "resumen",
+        "Cuentas de un recorte que NO debes hacer de cabeza: promedio de órdenes y de fallidas por mes, cuántos "
+        "técnicos con órdenes hubo y cuántas órdenes tuvo cada uno (promedio, mediana, máximo), y cuántos "
+        "municipios y ciclos. Úsala para «¿cuántos técnicos trabajaron?», «promedio por técnico», «promedio mensual».",
+        {**_FILTROS, "mes": _MES, "sin_filtros_de_pantalla": _SIN_PANTALLA},
+        [],
     ),
 )
 
@@ -179,38 +211,94 @@ def _lista(v: Any) -> list[str]:
     return [] if not v else [v] if isinstance(v, str) else list(v)
 
 
-def _filtrar_mapa(p: Payload, a: dict[str, Any]) -> dict[str, Any]:
+def _estado_resultante(vista: VistaTablero | None, nombres: dict[str, Any], quitar: list[str]) -> dict[str, Any]:
+    """Los filtros que quedarían en pantalla tras aplicar la acción, con la misma cascada del tablero.
+
+    Cambiar la zona suelta municipio y causal; elegir municipios suelta zona y causal (la causal
+    depende de la ubicación). Lo demás se conserva.
+    """
+    estado = {c: v for c, v in (vista.filtros() if vista else {}).items() if c in FILTROS_DEL_MAPA}
+    if "todos" in quitar:
+        estado = {}
+    for c in quitar:
+        estado.pop(c, None)
+    if "zona" in quitar:
+        estado.pop("municipio", None)
+    if "zona" in quitar or "municipio" in quitar:
+        estado.pop("causal", None)
+    if "zona" in nombres:
+        estado.pop("municipio", None)
+        estado.pop("causal", None)
+    elif "municipio" in nombres:
+        estado.pop("zona", None)
+        estado.pop("causal", None)
+    estado.update(nombres)
+    return estado
+
+
+def _filtrar_mapa(p: Payload, a: dict[str, Any], vista: VistaTablero | None = None) -> dict[str, Any]:
     """Valida los filtros contra el catálogo y arma la acción que el tablero aplicará.
 
     La `accion` no es para el modelo: el servicio la saca del resultado y la manda al navegador al
     final del turno, para que el mapa se mueva cuando la respuesta ya está escrita y no a medio camino.
+
+    Rechaza lo que dejaría el mapa vacío (Garzón con zona Norte, un ciclo de otra zona, un técnico sin
+    órdenes): antes se aplicaba, el tablero quedaba en 0 y el chat decía haberlo filtrado.
     """
     nombres = metrics.nombres_filtros(p, {c: a.get(c) for c in FILTROS_DEL_MAPA})
+    quitar = [c for c in _lista(a.get("quitar")) if c in (*FILTROS_DEL_MAPA, "mes", "todos")]
     meses = [p.meses[i] for i in metrics.resolver_meses(p, a["mes"])[0]] if a.get("mes") else []
-    if not nombres and not meses:
+    if not nombres and not meses and not quitar:
         return {"error": "No dijiste qué filtrar. Pide un municipio, zona, ciclo, técnico, brigada o mes."}
+
+    # Lo que el mapa no tiene como filtro: se avisa para que el modelo no diga que lo aplicó.
+    no_aplicado = {
+        c: "el mapa no filtra por esto" for c in metrics.DIMENSIONES if c not in FILTROS_DEL_MAPA and a.get(c)
+    }
+
+    estado = _estado_resultante(vista, nombres, quitar)
+    if "todos" in quitar or "mes" in quitar:
+        ver_meses = meses or [p.meses[-1]]  # Limpiar vuelve al mes en curso
+    else:
+        ver_meses = meses or (vista.meses if vista and vista.meses else None)
+    idx_meses, _ = metrics.resolver_meses(p, ver_meses)
+    if not metrics.agrupar(p, estado, idx_meses).get(None):
+        salvan = [
+            c for c in estado
+            if len(estado) > 1 and metrics.agrupar(p, {k: v for k, v in estado.items() if k != c}, idx_meses).get(None)
+        ]
+        return {
+            "error": "Con esos filtros juntos el mapa se quedaría sin órdenes. NO se movió nada.",
+            "quedaria": metrics.nombres_filtros(p, estado),
+            "meses": [p.meses[i] for i in idx_meses],
+            "quitando_uno_de_estos_si_hay_ordenes": salvan,
+            "que_hacer": "Dile al usuario que esa combinación no existe en los datos y propón dejar solo uno de los filtros en conflicto.",
+        }
+
     accion = {
         "tipo": "filtrar_mapa",
         "municipios": _lista(nombres.get("municipio")),
         "tecnicos": _lista(nombres.get("tecnico")),
         "meses": meses,
+        "quitar": quitar,
         **{c: nombres.get(c) for c in FILTROS_DEL_MAPA if c not in ("municipio", "tecnico")},
     }
     return {
-        "aplicado": {**nombres, **({"meses": meses} if meses else {})},
-        "nota": "El mapa se filtra al terminar tu respuesta; di qué filtraste.",
+        "aplicado": {**nombres, **({"meses": meses} if meses else {}), **({"quitar": quitar} if quitar else {})},
+        **({"no_aplicado": no_aplicado} if no_aplicado else {}),
+        "nota": "El mapa se filtra al terminar tu respuesta. Di SOLO lo que aparece en `aplicado`.",
         "accion": accion,
     }
 
 
-def _ejecutar(nombre: str, p: Payload, a: dict[str, Any]) -> dict[str, Any]:
+def _ejecutar(nombre: str, p: Payload, a: dict[str, Any], vista: VistaTablero | None = None) -> dict[str, Any]:
     if nombre == "efectividad":
         return metrics.efectividad(p, _filtros(a), a.get("mes"))
     if nombre == "ranking":
         return metrics.ranking(
             p, a["dimension"], _filtros(a), a.get("mes"),
             ordenar_por=a.get("ordenar_por") or "ef_pond",
-            peores=bool(a.get("peores")),
+            extremo=a.get("extremo") or "mayor",
             min_ordenes=a.get("min_ordenes") or 10,
             limite=a.get("limite") or 10,
         )
@@ -222,9 +310,11 @@ def _ejecutar(nombre: str, p: Payload, a: dict[str, Any]) -> dict[str, Any]:
             min_ordenes=a.get("min_ordenes") or 10, limite=a.get("limite") or 10,
         )
     if nombre == "valores_de":
-        return metrics.valores_de(p, a["dimension"], a.get("texto"))
+        return metrics.valores_de(p, a["dimension"], a.get("texto"), filtros=_filtros(a))
+    if nombre == "resumen":
+        return metrics.resumen(p, _filtros(a), a.get("mes"))
     if nombre == "filtrar_mapa":
-        return _filtrar_mapa(p, a)
+        return _filtrar_mapa(p, a, vista)
     raise KeyError(nombre)
 
 
@@ -268,7 +358,7 @@ def ejecutar(nombre: str, argumentos: dict[str, Any], p: Payload, vista: VistaTa
     """Corre una herramienta. Nunca lanza: un fallo vuelve como `{"error": ...}` con qué hacer."""
     try:
         args, aplicados = _con_pantalla(nombre, argumentos, vista)
-        resultado = _ejecutar(nombre, p, args)
+        resultado = _ejecutar(nombre, p, args, vista)
         if aplicados:
             resultado["filtros_de_pantalla"] = aplicados
         return resultado

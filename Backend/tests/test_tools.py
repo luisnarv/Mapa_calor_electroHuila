@@ -5,7 +5,7 @@ from app.services import payload_store, tools
 
 def test_cada_herramienta_declara_sus_parametros():
     nombres = [t["function"]["name"] for t in tools.TOOLS]
-    assert nombres == ["efectividad", "ranking", "serie_mensual", "comparar_periodos", "filtrar_mapa", "valores_de"]
+    assert nombres == ["efectividad", "ranking", "serie_mensual", "comparar_periodos", "filtrar_mapa", "valores_de", "resumen"]
     for t in tools.TOOLS:
         f = t["function"]
         assert set(f["parameters"]["required"]) <= set(f["parameters"]["properties"])
@@ -42,7 +42,7 @@ def test_los_filtros_de_pantalla_se_aplican_si_el_modelo_no_pide_otro_lugar(payl
     r = tools.ejecutar("efectividad", {}, payload, vista)
     assert (r["ordenes"], r["ef_pct"]) == (10, 50.0)
     assert r["filtros_de_pantalla"] == {"municipio": ["Neiva"], "meses": ["2026-02"]}
-    assert r["base"] == {"periodo": "2026-02", "filtros": {"municipio": ["Neiva"]}}
+    assert r["base"] == {"periodo": "2026-02", "filtros": {"municipio": ["Neiva"]}, "datos_hasta": "2026-02-28"}
 
 
 def test_lo_que_pide_el_modelo_manda_sobre_la_pantalla(payload):
@@ -67,10 +67,12 @@ def test_la_pantalla_aparece_en_el_prompt_de_sistema():
     from app.schemas.chat import ChatRequest, Message
 
     req = ChatRequest(messages=[Message(role="user", content="hola")], vista=VistaTablero(zona="Norte", meses=["2026-09"]))
-    sistema = OpenAIService(None, "m", "PROMPT")._mensajes(req)[0]["content"]
-    assert "FILTROS ACTIVOS EN SU PANTALLA — zona: Norte · meses: 2026-09" in sistema
+    # La pantalla va al final de la conversación: es lo último que lee el modelo.
+    pantalla = OpenAIService(None, "m", "PROMPT")._mensajes(req)[-1]["content"]
+    assert "FILTROS ACTIVOS EN SU PANTALLA AHORA — zona: Norte · meses: 2026-09" in pantalla
     req.vista = None
-    assert "todo el histórico" in OpenAIService(None, "m", "PROMPT")._mensajes(req)[0]["content"]
+    sin = OpenAIService(None, "m", "PROMPT")._mensajes(req)[-1]["content"]
+    assert "NO tiene filtros puestos" in sin and "todo el histórico" in sin
 
 
 def test_la_bandera_de_ignorar_pantalla_solo_vale_si_el_usuario_lo_pide():
@@ -140,7 +142,7 @@ def test_un_ranking_por_municipio_no_se_filtra_por_los_elegidos(payload):
 def test_filtrar_mapa_arma_la_accion_con_nombres_del_catalogo(payload):
     r = tools.ejecutar("filtrar_mapa", {"municipio": ["neiva", "AIPE"], "zona": "norte", "mes": "2026-02"}, payload)
     assert r["accion"] == {
-        "tipo": "filtrar_mapa", "municipios": ["Neiva", "Aipe"], "tecnicos": [], "meses": ["2026-02"],
+        "tipo": "filtrar_mapa", "municipios": ["Neiva", "Aipe"], "tecnicos": [], "meses": ["2026-02"], "quitar": [],
         "zona": "Norte", "ciclo": None, "brigada": None,
         "causal": None, "clase_servicio": None, "actividad": None,
     }
