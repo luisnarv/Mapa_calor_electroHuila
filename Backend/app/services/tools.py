@@ -179,7 +179,19 @@ _DEFINICIONES = (
         "cuéntale por qué y qué alternativa hay.",
         {
             **{c: _FILTROS[c] for c in FILTROS_DEL_MAPA},
-            "mes": _MES,
+            "mes": {
+                **_MES,
+                "description": _MES["description"] + " Para ver TODOS los meses pasa 'todo'.",
+            },
+            "quitar_meses": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Meses o años que se SUELTAN de los que el usuario ya tiene elegidos, cada uno 'YYYY-MM' o 'YYYY' "
+                    "(un año entero). «Quita octubre de 2026» = ['2026-10']; «quita 2025» = ['2025']. Nunca dejes al "
+                    "usuario sin meses."
+                ),
+            },
             "quitar": {
                 "type": "array",
                 "items": {"type": "string", "enum": [*FILTROS_DEL_MAPA, "mes", "todos"]},
@@ -275,6 +287,17 @@ def _filtrar_mapa(
     nombres = metrics.nombres_filtros(p, {c: a.get(c) for c in FILTROS_DEL_MAPA})
     quitar = [c for c in _lista(a.get("quitar")) if c in (*FILTROS_DEL_MAPA, "mes", "todos")]
     meses = [p.meses[i] for i in metrics.resolver_meses(p, a["mes"])[0]] if a.get("mes") else []
+    soltar = _lista(a.get("quitar_meses"))
+    if soltar:
+        # Sale de lo que ya tiene elegido (o de todo, si no hay nada): la acción lleva la lista que debe quedar.
+        fuera = {p.meses[i] for q in soltar for i in metrics.resolver_meses(p, q)[0]}
+        quedan = [m for m in (meses or (vista.meses if vista and vista.meses else list(p.meses))) if m not in fuera]
+        if not quedan:
+            return {
+                "error": "Así el usuario se quedaría sin meses. NO se movió nada.",
+                "que_hacer": "Dile que debe quedar al menos un mes elegido y pregúntale cuál dejar.",
+            }
+        meses = quedan
     # Soltar filtros solo si el usuario lo pidió: «oculta las efectivas» se tomaba por «quita la actividad».
     if quitar and pidio is not None and not pide_quitar(pidio):
         quitar = []
@@ -473,6 +496,117 @@ def quitar_directo(mensaje: str) -> list[str] | None:
             return None
         campos.append(campo)
     return list(dict.fromkeys(campos)) if campos else None
+
+
+# --- meses sueltos o todos a la vez, sin pasar por el modelo ------------------------------------------
+_MES_NUM = {
+    "enero": 1, "ene": 1, "febrero": 2, "feb": 2, "marzo": 3, "mar": 3, "abril": 4, "abr": 4, "mayo": 5, "may": 5,
+    "junio": 6, "jun": 6, "julio": 7, "jul": 7, "agosto": 8, "ago": 8, "septiembre": 9, "setiembre": 9, "sept": 9,
+    "sep": 9, "set": 9, "octubre": 10, "oct": 10, "noviembre": 11, "nov": 11, "diciembre": 12, "dic": 12,
+}
+_NOMBRE_MES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre",
+    "diciembre",
+)
+_RE_MES = re.compile(
+    r"\b(" + "|".join(sorted(_MES_NUM, key=len, reverse=True)) + r")\b(?:\s+(?:de|del)\s+(20\d\d)|\s+(20\d\d))?|\b(20\d\d)\b"
+)
+_RELLENO_MESES = {"de", "del", "el", "la", "los", "las", "y", "e", "mes", "meses", "ano", "anos", "filtro", "filtros", "periodo"}
+_MOSTRAR_TODOS = re.compile(
+    r"^(por favor )?(muestr\w*|ensen\w*|pon\w*|selecciona\w*|ver|quiero ver) (me |nos )?"
+    r"(todos los meses|todo el historico|todos los periodos)( por favor)?$"
+)
+_QUITAR_MESES = re.compile(
+    r"^(por favor )?((me )?(puedes|podrias) )?(quita|quitar|quitame|elimina|eliminar|saca|sacar|suelta|soltar|borra|borrar)\w* (?P<resto>.+)$"
+)
+
+
+def _meses_pedidos(texto: str) -> list[tuple[int | None, str | None]] | None:
+    """Los (mes, año) que nombra un texto normalizado; None si trae algo más que meses y años.
+
+    «enero, febrero y marzo de 2025» reparte el año a los tres. Un mes sin año vale para todos los años;
+    un año solo, para todos sus meses.
+    """
+    hallados = list(_RE_MES.finditer(texto))
+    if not hallados:
+        return None
+    sobra = _RE_MES.sub(" ", texto).split()
+    if any(w not in _RELLENO_MESES for w in sobra):
+        return None
+    pares = [
+        (_MES_NUM.get(m.group(1)), m.group(2) or m.group(3) or m.group(4)) for m in hallados
+    ]
+    heredado = None
+    for i in range(len(pares) - 1, -1, -1):
+        mes, anio = pares[i]
+        if anio is not None:
+            heredado = anio
+        elif heredado is not None and i + 1 < len(hallados):
+            entre = texto[hallados[i].end():hallados[i + 1].start()].split()
+            if all(w in ("y", "e") for w in entre):
+                pares[i] = (mes, heredado)
+            else:
+                heredado = None
+        else:
+            heredado = None
+    return pares
+
+
+def _claves_de(p: Payload, pares: list[tuple[int | None, str | None]]) -> set[str]:
+    claves: set[str] = set()
+    for mes, anio in pares:
+        for m in p.meses:
+            if (anio is None or m[:4] == anio) and (mes is None or int(m[5:7]) == mes):
+                claves.add(m)
+    return claves
+
+
+def _legible(clave: str) -> str:
+    return f"{_NOMBRE_MES[int(clave[5:7]) - 1]} de {clave[:4]}"
+
+
+def pide_meses_directo(mensaje: str) -> bool:
+    """Aviso barato: ¿vale la pena cargar los datos para resolver esto como una orden de meses?"""
+    if "?" in mensaje or "¿" in mensaje:
+        return False
+    texto = metrics.norm(mensaje)
+    return bool(_MOSTRAR_TODOS.match(texto)) or bool(
+        (m := _QUITAR_MESES.match(texto)) and _RE_MES.search(m.group("resto"))
+    )
+
+
+def meses_directo(mensaje: str, p: Payload, actuales: list[str]) -> dict[str, Any] | None:
+    """«Muéstrame todos los meses» y «quita octubre de 2026 / quita 2025 / quita marzo».
+
+    Devuelve `{"texto": ..., "meses": [...]}` (`meses` es None si no hay nada que mover) o None si el mensaje
+    es otra cosa. Se resuelve aquí porque el modelo unas veces respondía con un ranking en vez de mover el mapa.
+    """
+    if "?" in mensaje or "¿" in mensaje:
+        return None
+    texto = metrics.norm(mensaje)
+    if _MOSTRAR_TODOS.match(texto):
+        return {"texto": f"Listo: ahora ves todos los meses ({p.meses[0]} a {p.meses[-1]}).", "meses": list(p.meses)}
+    m = _QUITAR_MESES.match(texto)
+    if not m:
+        return None
+    pares = _meses_pedidos(m.group("resto"))
+    if not pares:
+        return None
+    fuera = _claves_de(p, pares)
+    if not fuera:
+        return {"texto": "Ese mes no está entre los datos, así que no cambié nada.", "meses": None}
+    base = [k for k in p.meses if k in set(actuales or p.meses)]
+    quedan = [k for k in base if k not in fuera]
+    quitados = [k for k in base if k in fuera]
+    if not quitados:
+        return {"texto": "Ese mes no estaba entre los que tienes elegidos, así que no cambié nada.", "meses": None}
+    if not quedan:
+        return {
+            "texto": "No puedo dejarte sin meses: tiene que quedar al menos uno elegido. ¿Cuál dejo?",
+            "meses": None,
+        }
+    dicho = ", ".join(_legible(k) for k in quitados) if len(quitados) <= 3 else f"{len(quitados)} meses"
+    return {"texto": f"Listo: quité {dicho}. Quedan {len(quedan)} {'mes' if len(quedan) == 1 else 'meses'} elegidos.", "meses": quedan}
 
 
 def pide_tipo_de_actividad(mensaje: str) -> bool:

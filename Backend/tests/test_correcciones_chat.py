@@ -382,3 +382,93 @@ def test_quitar_directo_no_llama_al_modelo_y_manda_la_accion():
     eventos = asyncio.run(correr())
     assert "quité el filtro de zona" in eventos[0]["delta"]
     assert eventos[-1]["accion"]["quitar"] == ["zona"] and not llamadas
+
+
+# --- varios años y meses: ver todos y quitar algunos --------------------------------------------------
+
+MESES_PRUEBA = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-10"]
+
+
+@pytest.fixture
+def con_meses(payload):
+    return replace(payload, meses=MESES_PRUEBA)
+
+
+def test_ver_todos_los_meses(con_meses):
+    r = tools.meses_directo("muéstrame todos los meses", con_meses, ["2026-10"])
+    assert r["meses"] == MESES_PRUEBA and "todos los meses" in r["texto"]
+
+
+@pytest.mark.parametrize(
+    "frase, actuales, quedan",
+    [
+        ("quita octubre de 2026", ["2025-10", "2026-10"], ["2025-10"]),
+        ("quita 2025", ["2025-10", "2025-11", "2026-01"], ["2026-01"]),
+        ("quita enero, febrero y marzo de 2026", ["2025-12", "2026-01", "2026-02", "2026-03"], ["2025-12"]),
+        ("quita octubre", ["2025-10", "2026-10", "2026-01"], ["2026-01"]),  # un mes sin año: en todos los años
+        ("quita el mes de noviembre de 2025", ["2025-10", "2025-11"], ["2025-10"]),
+        ("elimina oct 2025 y oct 2026", ["2025-10", "2026-10", "2026-01"], ["2026-01"]),
+    ],
+)
+def test_quitar_meses_y_anios_de_lo_elegido(con_meses, frase, actuales, quedan):
+    r = tools.meses_directo(frase, con_meses, actuales)
+    assert r["meses"] == quedan, r
+
+
+def test_no_deja_al_usuario_sin_meses(con_meses):
+    r = tools.meses_directo("quita octubre", con_meses, ["2025-10", "2026-10"])
+    assert r["meses"] is None and "al menos uno" in r["texto"]
+
+
+def test_quitar_un_mes_que_no_estaba_elegido_no_mueve_nada(con_meses):
+    r = tools.meses_directo("quita marzo de 2026", con_meses, ["2025-10"])
+    assert r["meses"] is None and "no estaba" in r["texto"]
+
+
+def test_un_mes_que_no_existe_en_los_datos(con_meses):
+    r = tools.meses_directo("quita diciembre de 2030", con_meses, ["2025-10"])
+    assert r["meses"] is None and "no está entre los datos" in r["texto"]
+
+
+@pytest.mark.parametrize("frase", ["quita el filtro de meses", "quita la zona norte", "quita octubre y muéstrame Neiva", "¿quito octubre?", "muéstrame Neiva"])
+def test_lo_que_no_es_solo_meses_lo_decide_otro(con_meses, frase):
+    assert tools.meses_directo(frase, con_meses, ["2026-10"]) is None, frase
+
+
+def test_el_aviso_barato_de_meses():
+    assert tools.pide_meses_directo("quita 2025") and tools.pide_meses_directo("muéstrame todos los meses")
+    assert not tools.pide_meses_directo("quita el filtro de zona") and not tools.pide_meses_directo("¿quita 2025?")
+
+
+def test_filtrar_mapa_quitar_meses_resta_de_lo_elegido(con_meses):
+    vista = VistaTablero(meses=["2025-10", "2026-01", "2026-02"])
+    r = tools.ejecutar("filtrar_mapa", {"quitar_meses": ["2026"]}, con_meses, vista, "quita 2026 y muéstrame")
+    assert r["accion"]["meses"] == ["2025-10"]
+    r2 = tools.ejecutar("filtrar_mapa", {"quitar_meses": ["2025", "2026"]}, con_meses, vista, "quita todo y muéstrame")
+    assert "sin meses" in r2["error"]
+
+
+def test_filtrar_mapa_acepta_todo_para_los_meses(con_meses):
+    r = tools.ejecutar("filtrar_mapa", {"mes": "todo"}, con_meses, None, "muéstrame todo")
+    assert r["accion"]["meses"] == MESES_PRUEBA
+
+
+def test_el_servicio_resuelve_los_meses_sin_el_modelo(con_meses, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.services import payload_store
+
+    monkeypatch.setattr(payload_store, "obtener", lambda *a, **k: con_meses)
+
+    async def create(**kw):
+        raise AssertionError("no debía llamar al modelo")
+
+    cliente = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    req = ChatRequest(messages=[Message(role="user", content="quita octubre de 2026")], vista=VistaTablero(meses=["2025-10", "2026-10"]))
+
+    async def correr():
+        return [e async for e in OpenAIService(cliente, "m", "P").stream_chat(req)]
+
+    eventos = asyncio.run(correr())
+    assert "quité octubre de 2026" in eventos[0]["delta"] and eventos[-1]["accion"]["meses"] == ["2025-10"]

@@ -87,6 +87,23 @@ const mesLegible = (ym) => {
   return MESES_CORTOS[+mes - 1] ? `${MESES_CORTOS[+mes - 1]} ${anio}` : ym;
 };
 
+/** Varios meses en pocas palabras: «sep 2026», «ene – mar 2026», «ene 2025 – oct 2026» o «5 meses · 2025, 2026». */
+function resumirMeses(lista) {
+  const ordenados = [...lista].sort();
+  if (ordenados.length <= 2) return ordenados.map(mesLegible).join(", ");
+  const num = (ym) => +ym.slice(0, 4) * 12 + +ym.slice(5, 7);
+  const seguidos = ordenados.every((ym, i) => i === 0 || num(ym) === num(ordenados[i - 1]) + 1);
+  const primero = ordenados[0];
+  const ultimo = ordenados[ordenados.length - 1];
+  if (seguidos) {
+    return primero.slice(0, 4) === ultimo.slice(0, 4)
+      ? `${mesLegible(primero).split(" ")[0]} – ${mesLegible(ultimo)}`
+      : `${mesLegible(primero)} – ${mesLegible(ultimo)}`;
+  }
+  const anios = [...new Set(ordenados.map((ym) => ym.slice(0, 4)))];
+  return `${ordenados.length} meses · ${anios.join(", ")}`;
+}
+
 const NOMBRE_QUITAR = {
   todos: "todos los filtros",
   municipio: "municipio",
@@ -112,7 +129,7 @@ function resumirFiltro(a) {
     a.causal,
     a.clase_servicio,
     a.actividad,
-    a.meses?.length ? a.meses.map(mesLegible).join(", ") : null,
+    a.meses?.length ? resumirMeses(a.meses) : null,
     a.quitar?.length
       ? a.quitar.includes("todos")
         ? "filtros quitados"

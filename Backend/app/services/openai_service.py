@@ -80,6 +80,24 @@ class OpenAIService:
         if tools.pide_instrucciones(self._ultimo_del_usuario(request)):
             yield {"delta": RESPUESTA_RESERVADA}
             return
+        ultimo = self._ultimo_del_usuario(request)
+        if tools.pide_meses_directo(ultimo):
+            try:
+                p = payload_store.obtener(settings.DATA_DIR, settings.DOCS_UC_CAMPO, settings.DOCS_NI_CON_OBSERVACION)
+                directo = tools.meses_directo(ultimo, p, request.vista.meses if request.vista else [])
+            except payload_store.PayloadNoDisponible:
+                directo = None  # sin datos decide el modelo, que explica qué falta
+            if directo:
+                yield {"delta": directo["texto"]}
+                if directo["meses"]:
+                    yield {
+                        "accion": {
+                            "tipo": "filtrar_mapa", "municipios": [], "tecnicos": [], "meses": directo["meses"],
+                            "quitar": [], "zona": None, "ciclo": None, "brigada": None, "causal": None,
+                            "clase_servicio": None, "actividad": None,
+                        }
+                    }
+                return
         quitar = tools.quitar_directo(self._ultimo_del_usuario(request))
         if quitar:
             nombres = {"clase_servicio": "clase de servicio", "tecnico": "técnico", "todos": "todos los filtros", "mes": "mes"}
